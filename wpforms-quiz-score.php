@@ -52,25 +52,52 @@ class WPForms_Quiz_Score {
         echo 'Configurações de Pontuação';
         echo '</div>';
         
+        // Adiciona CSS para melhorar a aparência
+        echo '<style>
+            .quiz-form-section { margin-bottom: 30px; padding: 20px; background: #fff; border: 1px solid #ddd; }
+            .quiz-question-settings { margin: 15px 0; padding: 15px; background: #f9f9f9; border-left: 4px solid #0073aa; }
+            .quiz-question-settings label { display: block; margin-bottom: 10px; font-weight: bold; }
+            .quiz-question-settings select { width: 100%; max-width: 400px; }
+            .quiz-question-info { margin-bottom: 15px; }
+            .quiz-question-info span { color: #666; }
+            .quiz-save-button { margin-top: 20px; }
+        </style>';
+        
         // Busca todos os formulários
         $forms = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}wpforms_forms");
+        
+        if (empty($forms)) {
+            echo '<div class="wpforms-setting-row">';
+            echo '<p>Nenhum formulário encontrado. Crie um formulário com campos de múltipla escolha ou seleção primeiro.</p>';
+            echo '</div>';
+            return;
+        }
         
         foreach ($forms as $form) {
             $form_data = json_decode($form->post_content, true);
             if (!empty($form_data['fields'])) {
-                echo '<div class="wpforms-setting-row">';
-                echo '<h4>Formulário: ' . esc_html($form_data['settings']['form_title']) . '</h4>';
+                $has_quiz_fields = false;
+                
+                echo '<div class="quiz-form-section">';
+                echo '<h3>Formulário: ' . esc_html($form_data['settings']['form_title']) . '</h3>';
                 
                 foreach ($form_data['fields'] as $field) {
                     if (in_array($field['type'], ['radio', 'select'])) {
+                        $has_quiz_fields = true;
+                        $saved_answer = $this->get_saved_answer($form->ID, $field['id']);
+                        
                         echo '<div class="quiz-question-settings">';
+                        echo '<div class="quiz-question-info">';
                         echo '<p><strong>Pergunta:</strong> ' . esc_html($field['label']) . '</p>';
+                        echo '<span>Tipo: ' . ucfirst($field['type']) . ' | ID: ' . $field['id'] . '</span>';
+                        echo '</div>';
+                        
                         echo '<label>Selecione a resposta correta:</label>';
                         echo '<select name="quiz_correct_answer[' . $form->ID . '][' . $field['id'] . ']">';
+                        echo '<option value="">Selecione uma resposta</option>';
                         
-                        if ($field['type'] === 'radio' || $field['type'] === 'select') {
+                        if (!empty($field['choices'])) {
                             foreach ($field['choices'] as $choice_id => $choice) {
-                                $saved_answer = $this->get_saved_answer($form->ID, $field['id']);
                                 $selected = ($saved_answer == $choice['label']) ? 'selected' : '';
                                 echo '<option value="' . esc_attr($choice['label']) . '" ' . $selected . '>';
                                 echo esc_html($choice['label']);
@@ -82,17 +109,23 @@ class WPForms_Quiz_Score {
                         echo '</div>';
                     }
                 }
+                
+                if (!$has_quiz_fields) {
+                    echo '<p>Este formulário não possui campos de múltipla escolha ou seleção.</p>';
+                }
+                
                 echo '</div>';
             }
         }
         
-        echo '<div class="wpforms-setting-row">';
+        echo '<div class="wpforms-setting-row quiz-save-button">';
         echo '<button class="wpforms-btn wpforms-btn-primary" id="save-quiz-settings">Salvar Configurações</button>';
+        echo '<span class="spinner" style="float: none; margin-left: 10px;"></span>';
         echo '</div>';
         
         echo '</div>';
 
-        // Adiciona JavaScript para salvar as configurações
+        // Atualiza o JavaScript para melhor feedback
         $this->add_settings_script();
     }
 
@@ -116,6 +149,13 @@ class WPForms_Quiz_Score {
             $('#save-quiz-settings').on('click', function(e) {
                 e.preventDefault();
                 
+                var $button = $(this);
+                var $spinner = $button.next('.spinner');
+                
+                // Desabilita o botão e mostra o spinner
+                $button.prop('disabled', true);
+                $spinner.css('visibility', 'visible');
+                
                 var settings = {};
                 $('.quiz-question-settings select').each(function() {
                     var name = $(this).attr('name');
@@ -132,10 +172,15 @@ class WPForms_Quiz_Score {
                     },
                     success: function(response) {
                         if (response.success) {
-                            alert('Configurações salvas com sucesso!');
+                            wpforms.showNotice('Configurações salvas com sucesso!', 'success');
                         } else {
-                            alert('Erro ao salvar configurações.');
+                            wpforms.showNotice('Erro ao salvar configurações.', 'error');
                         }
+                    },
+                    complete: function() {
+                        // Reabilita o botão e esconde o spinner
+                        $button.prop('disabled', false);
+                        $spinner.css('visibility', 'hidden');
                     }
                 });
             });

@@ -16,7 +16,6 @@ class WPForms_Quiz_Score {
         add_filter('wpforms_builder_settings_sections', array($this, 'add_settings_section'), 20, 2);
         add_filter('wpforms_form_settings_panel_content', array($this, 'add_settings_content'), 20);
         add_action('wp_ajax_save_quiz_settings', array($this, 'save_quiz_settings'));
-        add_action('plugins_loaded', array($this, 'create_tables'));
     }
 
     public function init() {
@@ -28,14 +27,17 @@ class WPForms_Quiz_Score {
             'wpforms-quiz-score',
             plugins_url('js/quiz-score.js', __FILE__),
             array('jquery'),
-            '1.0',
+            '1.0.' . time(), // Força recarregar cache
             true
         );
 
         // Passa as respostas corretas para o JavaScript
         $form_data = $this->get_form_data();
+        error_log('Dados enviados para JS: ' . print_r($form_data, true));
+        
         wp_localize_script('wpforms-quiz-score', 'wpformsQuizData', array(
-            'respostas' => $form_data
+            'respostas' => $form_data,
+            'debug' => true // Adicione flag de debug
         ));
     }
 
@@ -189,25 +191,6 @@ class WPForms_Quiz_Score {
         <?php
     }
 
-    public function create_tables() {
-        global $wpdb;
-        $table_name = $wpdb->prefix . 'wpforms_quiz_answers';
-        
-        $charset_collate = $wpdb->get_charset_collate();
-        
-        $sql = "CREATE TABLE IF NOT EXISTS $table_name (
-            id mediumint(9) NOT NULL AUTO_INCREMENT,
-            form_id bigint(20) NOT NULL,
-            field_id int(11) NOT NULL,
-            correct_answer text NOT NULL,
-            PRIMARY KEY  (id),
-            KEY form_field (form_id,field_id)
-        ) $charset_collate;";
-        
-        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-        dbDelta($sql);
-    }
-
     public function save_quiz_settings() {
         check_ajax_referer('wpforms-builder', 'nonce');
         
@@ -238,15 +221,69 @@ class WPForms_Quiz_Score {
 
     public function get_form_data() {
         global $wpdb;
-        $table_name = $wpdb->prefix . 'wpforms_quiz_answers';
         
-        $results = $wpdb->get_results("SELECT form_id, field_id, correct_answer FROM $table_name", ARRAY_A);
+        // Debug direto na tela
+        echo "<pre style='background: #fff; padding: 20px; margin: 20px; border: 1px solid #ddd;'>";
+        echo "Iniciando debug do Quiz Score...\n\n";
         
+        // Mostrar a query
+        $query = $wpdb->prepare(
+            "SELECT ID, post_content, post_title, post_type, post_status 
+            FROM {$wpdb->posts} 
+            WHERE post_type = %s 
+            AND post_status = %s",
+            'wpforms',
+            'publish'
+        );
+        echo "Query SQL: " . $query . "\n\n";
+
+        // Busca formulários
+        $forms = $wpdb->get_results($query);
+        echo "Formulários encontrados:\n";
+        var_dump($forms);
+        echo "\n\n";
+
+        // Verificar tabela posts
+        $all_post_types = $wpdb->get_results("
+            SELECT DISTINCT post_type 
+            FROM {$wpdb->posts}
+        ");
+        echo "Todos os post_types disponíveis:\n";
+        var_dump($all_post_types);
+        echo "\n\n";
+
         $form_data = array();
-        foreach ($results as $row) {
-            $form_data[$row['field_id']] = $row['correct_answer'];
-        }
         
+        if ($forms) {
+            foreach ($forms as $form) {
+                echo "Processando formulário: " . $form->post_title . "\n";
+                
+                $content = json_decode($form->post_content, true);
+                echo "Conteúdo do formulário:\n";
+                var_dump($content);
+                echo "\n";
+                
+                if ($content && isset($content['fields'])) {
+                    foreach ($content['fields'] as $field) {
+                        if (in_array($field['type'], array('radio', 'select'))) {
+                            echo "Campo de quiz encontrado: ID=" . $field['id'] . ", Tipo=" . $field['type'] . "\n";
+                            
+                            $saved_answer = get_post_meta($form->ID, 'quiz_correct_answer_' . $field['id'], true);
+                            echo "Resposta salva para campo " . $field['id'] . ": " . $saved_answer . "\n";
+                            
+                            $form_data[$field['id']] = $saved_answer;
+                        }
+                    }
+                }
+            }
+        } else {
+            echo "Nenhum formulário WPForms encontrado\n";
+        }
+
+        echo "Dados finais do formulário:\n";
+        var_dump($form_data);
+        echo "</pre>";
+
         return $form_data;
     }
 }

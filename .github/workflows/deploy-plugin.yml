@@ -1,0 +1,33 @@
+name: Deploy WPForms Quiz Score Plugin
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'wpforms-quiz-score.php'
+      - 'js/quiz-score.js'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Create plugin directory structure
+        run: |
+          mkdir -p test/content/plugin/wp-form-oprions-score/js
+
+      - name: Copy plugin files
+        run: |
+          cp wpforms-quiz-score.php test/content/plugin/wp-form-oprions-score/
+          cp js/quiz-score.js test/content/plugin/wp-form-oprions-score/js/
+
+      - name: Deploy to repository
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: "Deploy WPForms Quiz Score plugin files"
+          branch: main
+          file_pattern: test/content/plugin/wp-form-oprions-score/**/* 

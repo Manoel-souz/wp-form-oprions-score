@@ -1,0 +1,20 @@
+# Ignore o arquivo questionario.js antigo
+questionario.js
+
+# Arquivos do sistema
+.DS_Store
+Thumbs.db
+
+# Arquivos de IDE/Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Arquivos de dependências
+node_modules/
+vendor/
+
+# Arquivos de ambiente
+.env
+.env.* 

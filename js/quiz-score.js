@@ -54,44 +54,65 @@
             console.log('🔍 Carregando respostas para o formulário:', formId);
 
             // Faz a requisição AJAX apenas para o formulário atual
-            $.ajax({
-                url: wpformsQuizData.ajaxurl,
-                type: 'POST',
-                dataType: 'json',
-                data: {
-                    action: 'get_quiz_answers',
-                    form_id: formId,
-                    nonce: wpformsQuizData.nonce
-                },
-                success: (response) => {
-                    if (response && response.success) {
-                        this.respostasCorretas = {};
+            // Função para fazer a requisição AJAX
+            const fazerRequisicao = () => {
+                return new Promise((resolve, reject) => {
+                    $.ajax({
+                        url: wpformsQuizData.ajaxurl,
+                        type: 'POST',
+                        dataType: 'json',
+                        data: {
+                            action: 'get_quiz_answers',
+                            form_id: formId,
+                            nonce: wpformsQuizData.nonce
+                        },
+                        success: (response) => {
+                            if (response && response.success) {
+                                this.respostasCorretas = {};
 
-                        // Processa as respostas do formulário atual
-                        Object.entries(response.data).forEach(([key, value]) => {
-                            if (value.type === 'score_field') {
-                                wpformsQuizData.scoreFieldId = key;
-                                console.log('📊 Campo de pontuação:', key);
+                                Object.entries(response.data).forEach(([key, value]) => {
+                                    if (value.type === 'score_field') {
+                                        wpformsQuizData.scoreFieldId = key;
+                                        console.log('📊 Campo de pontuação:', key);
+                                    } else {
+                                        this.respostasCorretas[key] = value.answer;
+                                    }
+                                });
+
+                                console.log('✅ Respostas carregadas:', this.respostasCorretas);
+
+                                if (!wpformsQuizData.scoreFieldId) {
+                                    console.warn('⚠️ Campo de pontuação não encontrado');
+                                }
+                                resolve();
                             } else {
-                                this.respostasCorretas[key] = value.answer;
+                                console.error('❌ Erro ao carregar respostas:',
+                                    response ? response.data.message : 'Resposta inválida');
+                                reject();
                             }
-                        });
-
-                        console.log('✅ Respostas carregadas:', this.respostasCorretas);
-
-                        if (!wpformsQuizData.scoreFieldId) {
-                            console.warn('⚠️ Campo de pontuação não encontrado');
+                        },
+                        error: (error) => {
+                            console.error('❌ Erro na requisição:', error);
+                            this.showNotification('Erro ao carregar respostas', 'error');
+                            reject();
                         }
-                    } else {
-                        console.error('❌ Erro ao carregar respostas:',
-                            response ? response.data.message : 'Resposta inválida');
-                    }
-                },
-                error: (error) => {
-                    console.error('❌ Erro na requisição:', error);
-                    this.showNotification('Erro ao carregar respostas', 'error');
-                }
-            });
+                    });
+                });
+            };
+
+            // Faz duas requisições com intervalo de 2 segundos
+            fazerRequisicao()
+                .then(() => {
+                    console.log('🔄 Primeira requisição concluída');
+                    return new Promise(resolve => setTimeout(resolve, 2000));
+                })
+                .then(() => {
+                    console.log('🔄 Iniciando segunda requisição...');
+                    return fazerRequisicao();
+                })
+                .catch(error => {
+                    console.error('❌ Erro nas requisições:', error);
+                });
         }
 
         initEventos() {

@@ -1,9 +1,10 @@
 <?php
 /**
- * Plugin Name: WPForms Quiz Score
- * Description: Adiciona sistema de pontuação para formulários WPForms
- * Version: 1.0
- * Author: Manoel de Souza
+ * Plugin Name: WPForms Options Quiz Score
+ * Description: Adiciona um sistema avançado de pontuação e avaliação automática para formulários WPForms, permitindo criar questionários interativos com feedback instantâneo
+ * Version: 1.0.0
+ * Author: <a href="https://www.linkedin.com/in/manoel-sz/">Manoel de Souza</a>
+ * Author URI: <a href="https://optionstech.com.br">Optionstech</a>
  */
 
 if (!defined('ABSPATH')) exit;

@@ -152,9 +152,10 @@ class WPForms_Quiz_Score {
                         echo '</div>';
                         
                         echo '<label>Selecione a resposta correta:</label>';
-                        echo '<select name="quiz_correct_answer[' . $form->ID . '][' . $field['id'] . ']" 
+                        echo '<select name="quiz_correct_answer_' . $form->ID . '_' . $field['id'] . '" 
                                  data-form-id="' . $form->ID . '" 
-                                 data-field-id="' . $field['id'] . '">';
+                                 data-field-id="' . $field['id'] . '" 
+                                 class="quiz-answer-select">';
                         echo '<option value="">Selecione uma resposta</option>';
                         
                         if (!empty($field['choices'])) {
@@ -351,25 +352,45 @@ class WPForms_Quiz_Score {
                 e.preventDefault();
                 console.log('🎯 Iniciando salvamento...');
                 
+                // Coleta as respostas
                 var settings = {};
                 $('.quiz-question-settings select').each(function() {
                     var $select = $(this);
                     var form_id = $select.data('form-id');
                     var field_id = $select.data('field-id');
-                    var value = $select.val();
+                    var answer = $select.val();
                     
-                    if (value && value !== '') {
-                        settings['quiz_correct_answer[' + form_id + ']'] = {
+                    if (answer && answer !== '') {
+                        // Estrutura correta dos dados
+                        var key = 'quiz_correct_answer_' + form_id + '_' + field_id;
+                        settings[key] = {
                             form_id: form_id,
                             field_id: field_id,
-                            answer: value
+                            answer: answer
                         };
-                        console.log('Resposta encontrada:', form_id, field_id, value);
+                        
+                        console.log('Resposta coletada:', {
+                            form_id: form_id,
+                            field_id: field_id,
+                            answer: answer
+                        });
                     }
                 });
                 
                 // Debug
                 console.log('Dados a serem enviados:', settings);
+                
+                // Se não houver respostas selecionadas
+                if (Object.keys(settings).length === 0) {
+                    alert('Por favor, selecione pelo menos uma resposta correta.');
+                    return;
+                }
+                
+                // Mostra loading
+                var $button = $(this);
+                var $spinner = $button.next('.spinner');
+                $button.prop('disabled', true);
+                $spinner.css('visibility', 'visible');
                 
                 // Envia para o servidor
                 $.ajax({
@@ -391,6 +412,10 @@ class WPForms_Quiz_Score {
                     error: function(xhr, status, error) {
                         console.error('Erro:', error);
                         alert('Erro ao salvar configurações');
+                    },
+                    complete: function() {
+                        $button.prop('disabled', false);
+                        $spinner.css('visibility', 'hidden');
                     }
                 });
             });

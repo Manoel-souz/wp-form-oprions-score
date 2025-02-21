@@ -30,32 +30,50 @@
 
             // Busca o ID do formulário no DOM
             let formId = null;
+            console.log('🔍 Iniciando busca do formId...');
+            
             const formElement = document.querySelector('form[id^="wpforms-form-"]');
+            console.log('🔍 Form element encontrado:', formElement);
             
             if (formElement) {
+                console.log('🔍 ID do form element:', formElement.id);
                 const matches = formElement.id.match(/wpforms-form-(\d+)/);
+                console.log('🔍 Matches do regex:', matches);
+                
                 if (matches) {
                     formId = matches[1];
-                    console.log('🔍 Form ID encontrado no DOM:', formId);
+                    console.log('✅ Form ID encontrado no DOM:', formId);
+                } else {
+                    console.warn('⚠️ Regex não encontrou matches no ID do form');
                 }
+            } else {
+                console.warn('⚠️ Form element não encontrado no DOM');
             }
 
-            // Fallback para wpformsQuizData se não encontrar no DOM
+            // Fallback para wpformsQuizData
+            console.log('🔍 Verificando wpformsQuizData:', wpformsQuizData);
+            
             if (!formId && wpformsQuizData.formId) {
                 formId = wpformsQuizData.formId;
-                console.log('🔍 Form ID obtido do wpformsQuizData:', formId);
+                console.log('✅ Form ID obtido do wpformsQuizData:', formId);
+            } else if (!formId) {
+                console.error('❌ Nenhum form ID encontrado em nenhuma fonte');
             }
 
             if (!formId) {
-                console.error('❌ ID do formulário não encontrado');
+                console.error('❌ ID do formulário não encontrado - Abortando carregamento');
                 return;
             }
 
-            console.log('🔍 Carregando respostas para o formulário:', formId);
+            console.log('📝 Preparando para carregar respostas do form:', formId);
 
-            // Faz a requisição AJAX apenas para o formulário atual
             // Função para fazer a requisição AJAX
             const fazerRequisicao = () => {
+                console.group('🔄 Iniciando requisição AJAX');
+                console.log('URL:', wpformsQuizData.ajaxurl);
+                console.log('Form ID:', formId);
+                console.log('Nonce:', wpformsQuizData.nonce);
+                
                 return new Promise((resolve, reject) => {
                     $.ajax({
                         url: wpformsQuizData.ajaxurl,
@@ -67,36 +85,39 @@
                             nonce: wpformsQuizData.nonce
                         },
                         success: (response) => {
+                            console.log('✅ Resposta recebida:', response);
                             if (response && response.success) {
                                 this.respostasCorretas = {};
 
                                 Object.entries(response.data).forEach(([key, value]) => {
+                                    console.log('🔍 Processando resposta:', {key, value});
                                     if (value.type === 'score_field') {
                                         wpformsQuizData.scoreFieldId = key;
-                                        console.log('📊 Campo de pontuação:', key);
+                                        console.log('📊 Campo de pontuação definido:', key);
                                     } else {
                                         this.respostasCorretas[key] = value.answer;
+                                        console.log('✅ Resposta correta registrada:', {campo: key, resposta: value.answer});
                                     }
                                 });
 
-                                console.log('✅ Respostas carregadas:', this.respostasCorretas);
+                                console.log('✅ Todas respostas processadas:', this.respostasCorretas);
 
                                 if (!wpformsQuizData.scoreFieldId) {
-                                    console.warn('⚠️ Campo de pontuação não encontrado');
+                                    console.warn('⚠️ Campo de pontuação não encontrado nos dados');
                                 }
                                 resolve();
                             } else {
-                                console.error('❌ Erro ao carregar respostas:',
-                                    response ? response.data.message : 'Resposta inválida');
+                                console.error('❌ Erro na resposta:', response ? response.data.message : 'Resposta inválida');
                                 reject();
                             }
                         },
                         error: (error) => {
-                            console.error('❌ Erro na requisição:', error);
+                            console.error('❌ Erro na requisição AJAX:', error);
                             this.showNotification('Erro ao carregar respostas', 'error');
                             reject();
                         }
                     });
+                    console.groupEnd();
                 });
             };
 

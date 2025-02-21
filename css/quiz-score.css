@@ -1,1 +1,37 @@
- 
+.wpforms-field-hidden {
+    display: none !important;
+}
+
+.quiz-score-display {
+    font-weight: bold;
+    color: #2271b1;
+}
+
+input[data-calc-field="1"] {
+    background-color: #f8f9fa;
+    cursor: not-allowed;
+}
+
+.wpforms-calc-field {
+    background-color: #f8f9fa !important;
+    cursor: not-allowed !important;
+}
+
+/* Estilo para a opção no builder */
+.wpforms-field-option-row-calculate {
+    padding: 10px 0;
+    border-top: 1px solid #e6e6e6;
+    margin-top: 10px;
+}
+
+.wpforms-field-option-row-calculate label {
+    font-weight: 600 !important;
+    margin-bottom: 5px;
+    display: block;
+}
+
+.wpforms-field-option-row-calculate .description {
+    color: #666;
+    font-size: 12px;
+    margin-top: 3px;
+}

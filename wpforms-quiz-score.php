@@ -26,6 +26,20 @@ class WPForms_Quiz_Score {
         add_filter('wpforms_builder_settings_sections', array($this, 'add_settings_section'), 20, 2);
         add_filter('wpforms_form_settings_panel_content', array($this, 'add_settings_content'), 20);
         add_action('wp_ajax_save_quiz_settings', array($this, 'save_quiz_settings'));
+        add_action('wp_ajax_get_quiz_answers', array($this, 'get_quiz_answers'));
+        add_action('wp_ajax_nopriv_get_quiz_answers', array($this, 'get_quiz_answers'));
+        
+        // Hooks para adicionar a opção de cálculo
+        add_filter('wpforms_field_options_advanced_number', array($this, 'add_calculate_field_settings'), 10, 1);
+        add_filter('wpforms_field_properties', array($this, 'add_calculate_field_option'), 10, 2);
+        
+        // Adiciona seção de pontuação e shortcode
+        add_filter('wpforms_form_settings_panel_content', array($this, 'add_score_settings'), 10);
+        add_shortcode('wpforms_quiz_score', array($this, 'score_shortcode'));
+        
+        // Adiciona action para salvar campo de pontuação
+        add_action('wp_ajax_save_quiz_score_field', array($this, 'save_score_field'));
+        add_action('wp_ajax_nopriv_save_quiz_score_field', array($this, 'save_score_field'));
     }
 
     public function init() {
@@ -37,7 +51,7 @@ class WPForms_Quiz_Score {
             'wpforms-quiz-score',
             plugins_url('js/quiz-score.js', __FILE__),
             array('jquery'),
-            '1.0.' . time(),
+            '1.0.0',
             true
         );
 
@@ -48,11 +62,35 @@ class WPForms_Quiz_Score {
             '1.0.' . time()
         );
 
-        // Passa as respostas corretas para o JavaScript
-        $form_data = $this->get_form_data();
-        wp_localize_script('wpforms-quiz-score', 'wpformsQuizData', array(
-            'respostas' => $form_data
-        ));
+        // Busca o ID do campo selecionado para pontuação
+        $form_id = 0;
+        $score_field_id = '';
+
+        // Verifica se estamos em um formulário específico
+        if (isset($_GET['form_id'])) {
+            $form_id = absint($_GET['form_id']);
+            
+            // Busca o formulário usando a função correta do WPForms
+            $form = wpforms()->form->get($form_id);
+            
+            if ($form && !empty($form->post_content)) {
+                $form_data = json_decode($form->post_content, true);
+                if (is_array($form_data) && isset($form_data['settings']['quiz_score_field'])) {
+                    $score_field_id = $form_data['settings']['quiz_score_field'];
+                }
+            }
+        }
+
+        wp_localize_script(
+            'wpforms-quiz-score',
+            'wpformsQuizData',
+            array(
+                'ajaxurl' => admin_url('admin-ajax.php'),
+                'nonce' => wp_create_nonce('wpforms-quiz'),
+                'scoreFieldId' => $score_field_id,
+                'debug' => WP_DEBUG
+            )
+        );
     }
 
     public function add_settings_section($sections, $form_data) {
@@ -138,7 +176,6 @@ class WPForms_Quiz_Score {
                 $has_quiz_fields = false;
                 
                 echo '<div class="quiz-form-section">';
-                echo '<h3>Formulário: ' . esc_html($form_data['settings']['form_title']) . '</h3>';
                 
                 foreach ($form_data['fields'] as $field) {
                     if (in_array($field['type'], ['radio', 'select'])) {
@@ -169,6 +206,9 @@ class WPForms_Quiz_Score {
                         
                         echo '</select>';
                         echo '</div>';
+                        
+                        // Adiciona espaço e divisor após cada pergunta
+                        echo '<div style="margin: 20px 0;"><hr></div>';
                     }
                 }
                 
@@ -181,7 +221,7 @@ class WPForms_Quiz_Score {
         }
         
         echo '<div class="wpforms-setting-row quiz-save-button">';
-        echo '<button class="wpforms-btn wpforms-btn-primary" id="save-quiz-settings">Salvar Configurações</button>';
+        echo '<button class="wpforms-btn wpforms-btn-primary wpforms-btn-orange" id="save-quiz-settings" style="padding: 10px 20px;"><span class="dashicons dashicons-saved" style="margin-right: 5px;"></span>Salvar Perguntas</button>';
         echo '<span class="spinner" style="float: none; margin-left: 10px;"></span>';
         echo '</div>';
         
@@ -452,6 +492,286 @@ class WPForms_Quiz_Score {
         
         error_log('Dados do formulário recuperados: ' . print_r($form_data, true));
         return $form_data;
+    }
+
+    public function get_quiz_answers() {
+        // Log para debug
+        error_log('📝 Quiz Score: Requisição AJAX recebida');
+
+        // Verifica o nonce
+        if (!check_ajax_referer('wpforms-quiz', 'nonce', false)) {
+            error_log('❌ Quiz Score: Nonce inválido');
+            wp_send_json_error(array('message' => 'Nonce inválido'));
+            return;
+        }
+
+        $form_id = isset($_POST['form_id']) ? absint($_POST['form_id']) : 0;
+        
+        if (!$form_id) {
+            error_log('❌ Quiz Score: Form ID não fornecido');
+            wp_send_json_error(array('message' => 'Form ID não fornecido'));
+            return;
+        }
+
+        error_log("🔍 Quiz Score: Buscando respostas para form_id: $form_id");
+
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'wpforms_quiz_answers';
+        
+        $respostas = $wpdb->get_results($wpdb->prepare(
+            "SELECT field_id, correct_answer 
+            FROM $table_name 
+            WHERE form_id = %d",
+            $form_id
+        ), ARRAY_A);
+
+        error_log('📝 Quiz Score: Respostas encontradas: ' . print_r($respostas, true));
+
+        $dados_formatados = array();
+        foreach ($respostas as $resposta) {
+            $dados_formatados[$resposta['field_id']] = $resposta['correct_answer'];
+        }
+
+        wp_send_json_success($dados_formatados);
+    }
+
+    // Adiciona a opção de cálculo no builder
+    public function add_calculate_field_settings($options) {
+        $options['calculate'] = array(
+            'id'      => 'calculate',
+            'name'    => 'calculate',
+            'type'    => 'checkbox',
+            'label'   => 'Campo de Cálculo',
+            'tooltip' => 'Quando ativado, este campo mostrará automaticamente a nota final do quiz.',
+            'class'   => 'wpforms-field-option-row-calculate'
+        );
+        
+        return $options;
+    }
+
+    // Modifica o campo quando a opção de cálculo está ativada
+    public function add_calculate_field_option($properties, $field) {
+        if (!empty($field['calculate'])) {
+            $properties['container']['class'][] = 'wpforms-field-hidden';
+            $properties['inputs']['primary']['data']['calc-field'] = '1';
+            $properties['inputs']['primary']['attr']['readonly'] = 'readonly';
+            $properties['inputs']['primary']['class'][] = 'wpforms-calc-field';
+        }
+        return $properties;
+    }
+
+    // Adiciona o filtro para substituir a variável {quiz_score}
+    public function process_smart_tags($content, $form_data, $fields = array(), $entry_id = 0) {
+        if (strpos($content, '{quiz_score}') !== false) {
+            $content = str_replace('{quiz_score}', '<span class="quiz-score-display">0</span>', $content);
+        }
+        return $content;
+    }
+
+    public function add_score_settings($instance) {
+        global $wpdb;
+        
+        echo '<div class="wpforms-panel-content-section wpforms-panel-content-section-quiz_score">';
+        echo '<div class="wpforms-panel-content-section-title">';
+        echo 'Opções de Pontuação';
+        echo '</div>';
+        
+        // Busca o formulário atual
+        $form_id = absint($_GET['form_id']);
+        if (!$form_id) {
+            echo '<p>Formulário não encontrado.</p>';
+            echo '</div>';
+            return;
+        }
+        
+        // Busca os campos do formulário
+        $form = wpforms()->form->get($form_id);
+        if (empty($form)) {
+            echo '<p>Formulário não encontrado.</p>';
+            echo '</div>';
+            return;
+        }
+        
+        $form_data = json_decode($form->post_content, true);
+        $number_fields = array();
+        
+        // Filtra apenas campos do tipo number
+        if (!empty($form_data['fields'])) {
+            foreach ($form_data['fields'] as $field) {
+                if ($field['type'] === 'number') {
+                    $number_fields[$field['id']] = array(
+                        'label' => $field['label'],
+                        'id' => $field['id']
+                    );
+                }
+            }
+        }
+        
+        // Busca a configuração atual
+        $current_score_field = isset($form_data['settings']['quiz_score_field']) ? 
+                              $form_data['settings']['quiz_score_field'] : '';
+        
+        // Exibe as opções
+        echo '<div class="wpforms-setting-row">';
+        echo '<label class="wpforms-setting-label">Campo para Exibir Pontuação</label>';
+        echo '<div class="wpforms-setting-field">';
+        
+        if (empty($number_fields)) {
+            echo '<p class="description" style="color: #cc0000;">Nenhum campo numérico encontrado. Adicione um campo do tipo "Número" ao formulário.</p>';
+        } else {
+            echo '<select name="settings[quiz_score_field]" id="quiz_score_field">';
+            echo '<option value="">Selecione um campo</option>';
+            
+            foreach ($number_fields as $field) {
+                $selected = ($current_score_field == $field['id']) ? 'selected' : '';
+                echo sprintf(
+                    '<option value="%d" %s>%s (ID: %d)</option>',
+                    $field['id'],
+                    $selected,
+                    esc_html($field['label']),
+                    $field['id']
+                );
+            }
+            
+            echo '</select>';
+            echo '<p class="description">Selecione o campo numérico onde a pontuação será exibida automaticamente.</p>';
+        }
+        
+        echo '</div>';
+        echo '</div>';
+        
+        // Informações do shortcode
+        echo '<div class="wpforms-setting-row">';
+        echo '<label class="wpforms-setting-label">Shortcode da Pontuação</label>';
+        echo '<div class="wpforms-setting-field">';
+        echo '<div class="shortcode-container" style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin: 10px 0;">';
+        echo '<p style="margin:0 0 10px 0;"><strong>Shortcode básico:</strong></p>';
+        echo '<code style="display:block;padding:8px;background:#fff;border:1px solid #ddd;border-radius:3px">[wpforms_quiz_score form_id="' . $form_id . '"]</code>';
+        echo '<p style="margin:10px 0 0 0;font-size:13px;color:#666;">💡 Copie e cole este shortcode em qualquer página ou post para exibir a pontuação do quiz.</p>';
+        echo '</div>';
+        echo '<div class="shortcode-examples" style="margin-top:15px;">';
+        echo '<p style="margin:0 0 8px 0;"><strong>Exemplos de uso:</strong></p>';
+        echo '<ul style="margin:0;padding-left:20px;color:#666;font-size:13px;">';
+        echo '<li>Em posts: Cole o shortcode no editor</li>'; 
+        echo '<li>Aqui no formulário: Selecione um elemento HTML e adicione: <code style="background:#f1f1f1;padding:2px 4px;">[wpforms_quiz_score form_id="' . $form_id . '"]</code></li>';
+        echo '</ul>';
+        echo '</div>';
+        echo '</div>';
+        echo '</div>';
+        
+        echo '</div>';
+    }
+
+    public function score_shortcode($atts) {
+        $atts = shortcode_atts(array(
+            'form_id' => 0
+        ), $atts);
+        
+        if (empty($atts['form_id'])) {
+            return '';
+        }
+        
+        // Retorna um span que será atualizado via JavaScript
+        return sprintf(
+            '<span class="quiz-score-display" data-form-id="%d">0.0</span>',
+            (int)$atts['form_id']
+        );
+    }
+
+    public function save_score_field() {
+        error_log('🎯 Iniciando salvamento do campo de pontuação');
+        
+        // Verifica o nonce e permissões
+        if (!check_ajax_referer('wpforms-quiz', 'nonce', false)) {
+            error_log('❌ Nonce inválido');
+            wp_send_json_error(array('message' => 'Nonce inválido'));
+            return;
+        }
+
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'wpforms_quiz_answers';
+        
+        $form_id = isset($_POST['form_id']) ? absint($_POST['form_id']) : 0;
+        $field_id = isset($_POST['field_id']) ? absint($_POST['field_id']) : 0;
+        
+        error_log(sprintf('📝 Dados recebidos - Form ID: %d, Field ID: %d', $form_id, $field_id));
+        
+        if (!$form_id || !$field_id) {
+            error_log('❌ IDs inválidos');
+            wp_send_json_error(array('message' => 'IDs inválidos'));
+            return;
+        }
+
+        // Debug da estrutura da tabela
+        $table_structure = $wpdb->get_results("DESCRIBE $table_name");
+        error_log('📊 Estrutura da tabela:');
+        error_log(print_r($table_structure, true));
+
+        // Verifica se já existe um campo de pontuação
+        $existing = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table_name 
+            WHERE form_id = %d AND field_type = 'score_field'",
+            $form_id
+        ));
+
+        error_log('🔍 Registro existente:');
+        error_log(print_r($existing, true));
+
+        if ($existing) {
+            // Atualiza o registro existente
+            $result = $wpdb->update(
+                $table_name,
+                array(
+                    'field_id' => $field_id,
+                    'updated_at' => current_time('mysql')
+                ),
+                array(
+                    'form_id' => $form_id,
+                    'field_type' => 'score_field'
+                ),
+                array('%d', '%s'),
+                array('%d', '%s')
+            );
+            error_log('🔄 Atualizando registro existente. Resultado: ' . ($result !== false ? 'Sucesso' : 'Falha'));
+        } else {
+            // Insere novo registro
+            $result = $wpdb->insert(
+                $table_name,
+                array(
+                    'form_id' => $form_id,
+                    'field_id' => $field_id,
+                    'field_type' => 'score_field',
+                    'created_at' => current_time('mysql'),
+                    'updated_at' => current_time('mysql')
+                ),
+                array('%d', '%d', '%s', '%s', '%s')
+            );
+            error_log('➕ Inserindo novo registro. Resultado: ' . ($result !== false ? 'Sucesso' : 'Falha'));
+        }
+
+        if ($result === false) {
+            error_log('❌ Erro no banco de dados: ' . $wpdb->last_error);
+            wp_send_json_error(array(
+                'message' => 'Erro ao salvar',
+                'error' => $wpdb->last_error
+            ));
+            return;
+        }
+
+        // Debug final
+        $saved_data = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table_name 
+            WHERE form_id = %d AND field_type = 'score_field'",
+            $form_id
+        ));
+        error_log('✅ Dados salvos no banco:');
+        error_log(print_r($saved_data, true));
+
+        wp_send_json_success(array(
+            'message' => 'Campo de pontuação salvo com sucesso',
+            'field_id' => $field_id,
+            'saved_data' => $saved_data
+        ));
     }
 }
 

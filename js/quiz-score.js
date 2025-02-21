@@ -282,8 +282,9 @@
                 return;
             }
 
-            // Obtém o ID do formulário atual
-            const formId = wpformsQuizData.formId;
+            // Obtém o formulário dinamicamente usando os atributos da imagem
+            const formId = document.querySelector('form[data-id]')?.dataset?.id || wpformsQuizData.formId;
+            console.log('🔍 formId', formId);
 
             if (!formId) {
                 console.error('❌ Formulário não encontrado');
@@ -291,10 +292,17 @@
                 return 0;
             }
 
-            // Busca campos de resposta (radio e select)
-            const form = document.querySelector(`#wpforms-form-${formId}`);
+            // Busca o formulário usando os atributos name e id
+            const form = document.querySelector(`form[name="wpforms-builder"][id="wpforms-builder-form"]`) || 
+                        document.querySelector(`#wpforms-form-${formId}`);
+
+            // Busca campos de resposta (radio e select) dentro do formulário
             const camposResposta = form ? form.querySelectorAll('input[type="radio"]:checked, select') : [];
             const totalCampos = this.respostasCorretas ? Object.keys(this.respostasCorretas).length : 0;
+
+            console.log('🔍 form', form);
+            console.log('🔍 camposResposta', camposResposta); 
+            console.log('🔍 totalCampos', totalCampos);
 
             console.log('📊 Total de campos:', totalCampos);
 

@@ -80,14 +80,31 @@ class WPForms_Quiz_Score {
         // Se estiver na página de edição do formulário
         if (isset($_GET['form_id'])) {
             $form_id = absint($_GET['form_id']);
-        } 
-        // Se estiver na página do formulário
-        else if (isset($_POST['wpforms']['id'])) {
-            $form_id = absint($_POST['wpforms']['id']);
         }
-        // Fallback para ID fixo se necessário
+        // Busca o ID do formulário no HTML
         else {
-            $form_id = 8; // ID do formulário que sabemos que existe
+            // Busca o formulário no DOM usando jQuery
+            $html = file_get_contents('php://input');
+            if (preg_match('/wpforms-form-(\d+)/', $html, $matches)) {
+                $form_id = absint($matches[1]);
+                error_log('🔍 Form ID encontrado no HTML: ' . $form_id);
+            }
+            
+            // Se não encontrou no DOM, tenta outras formas
+            if (!$form_id) {
+                error_log('🔍 Nenhum Form ID encontrado no HTML');
+                $forms = get_posts(array(
+                    'post_type' => 'wpforms',
+                    'posts_per_page' => -1
+                ));
+
+                foreach ($forms as $form) {
+                    if (strpos($html, 'wpforms-form-' . $form->ID) !== false) {
+                        $form_id = $form->ID;
+                        break;
+                    }
+                }
+            }
         }
 
         error_log('🔍 Form ID detectado: ' . $form_id);
@@ -119,138 +136,116 @@ class WPForms_Quiz_Score {
     }
 
     public function add_settings_content($instance) {
-        error_log('🎯 quinto add_settings_content');
         global $wpdb;
         
-        // Debug inicial
-        error_log('🔍 Iniciando debug da tela de criação de formulário');
+        // Obtém o ID do formulário atual
+        $current_form_id = isset($_GET['form_id']) ? absint($_GET['form_id']) : 0;
+        
+        if (!$current_form_id) {
+            echo '<p>ID do formulário não encontrado.</p>';
+            return;
+        }
 
-        // Busca os formulários
-        $forms = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}posts WHERE post_type = 'wpforms'");
-        error_log('Formulários encontrados com sucesso!');
+        // Busca todas as respostas salvas para este formulário
+        $saved_answers = $wpdb->get_results($wpdb->prepare(
+            "SELECT field_id, correct_answer 
+             FROM {$wpdb->prefix}wpforms_quiz_answers 
+             WHERE form_id = %d",
+            $current_form_id
+        ), OBJECT_K); // OBJECT_K usa field_id como chave
 
-        // Adicionar JavaScript para debug na tela de criação
-        ?>
-        <script type="text/javascript">
-        jQuery(document).ready(function($) {
-            console.group('🎯 WPForms Quiz Score - Debug Builder');
-            
-            // Debug dos formulários disponíveis
-            console.log('Formulários carregados:', <?php echo json_encode($forms); ?>);
-            
-            // Debug quando salvar configurações
-            $('#save-quiz-settings').on('click', function(e) {
-                console.group('💾 Salvando Configurações');
-                
-                var settings = {};
-                $('.quiz-question-settings select').each(function() {
-                    var name = $(this).attr('name');
-                    var value = $(this).val();
-                    settings[name] = value;
-                    console.log('Campo:', name, 'Valor:', value);
-                });
-                
-                console.log('Configurações a serem salvas:', settings);
-                console.groupEnd();
-            });
+        $form = wpforms()->form->get($current_form_id);
+        if (empty($form)) {
+            echo '<p>Formulário não encontrado.</p>';
+            return;
+        }
 
-            // Debug de campos do formulário
-            $('.wpforms-field').each(function() {
-                console.log('Campo encontrado:', {
-                    id: $(this).data('field-id'),
-                    type: $(this).data('field-type'),
-                    label: $(this).find('.label-title').text()
-                });
-            });
+        $form_data = json_decode($form->post_content, true);
 
-            // Debug quando selecionar resposta correta
-            $(document).on('change', '.quiz-question-settings select', function() {
-                console.log('Resposta selecionada:', {
-                    field: $(this).attr('name'),
-                    value: $(this).val()
-                });
-            });
-
-            console.groupEnd();
-        });
-        </script>
-        <?php
-
-        // Continua com o código original...
         echo '<div class="wpforms-panel-content-section wpforms-panel-content-section-quiz_score">';
         echo '<div class="wpforms-panel-content-section-title">';
         echo 'Configurações de Pontuação';
         echo '</div>';
-        
-        if (empty($forms)) {
-            error_log('⚠️ Nenhum formulário encontrado');
-            echo '<div class="wpforms-setting-row">';
-            echo '<p>Nenhum formulário encontrado. Crie um formulário com campos de múltipla escolha ou seleção primeiro.</p>';
-            echo '</div>';
-            return;
-        }
 
-        foreach ($forms as $form) {
-            $form_data = json_decode($form->post_content, true);
-
-
-            if (!empty($form_data['fields'])) {
-                $has_quiz_fields = false;
-                
-                echo '<div class="quiz-form-section">';
-                
-                foreach ($form_data['fields'] as $field) {
-                    if (in_array($field['type'], ['radio', 'select'])) {
-                        $has_quiz_fields = true;
-                        $saved_answer = $this->get_saved_answer($form->ID, $field['id']);
-                        
-                        echo '<div class="quiz-question-settings">';
-                        echo '<div class="quiz-question-info">';
-                        echo '<p><strong>Pergunta:</strong> ' . esc_html($field['label']) . '</p>';
-                        echo '<span>Tipo: ' . ucfirst($field['type']) . ' | ID: ' . $field['id'] . '</span>';
-                        echo '</div>';
-                        
-                        echo '<label>Selecione a resposta correta:</label>';
-                        echo '<select name="quiz_correct_answer_' . $form->ID . '_' . $field['id'] . '" 
-                                 data-form-id="' . $form->ID . '" 
-                                 data-field-id="' . $field['id'] . '" 
-                                 class="quiz-answer-select">';
-                        echo '<option value="">Selecione uma resposta</option>';
-                        
-                        if (!empty($field['choices'])) {
-                            foreach ($field['choices'] as $choice_id => $choice) {
-                                $selected = ($saved_answer == $choice['label']) ? 'selected' : '';
-                                echo '<option value="' . esc_attr($choice['label']) . '" ' . $selected . '>';
-                                echo esc_html($choice['label']);
-                                echo '</option>';
-                            }
+        if (!empty($form_data['fields'])) {
+            $has_quiz_fields = false;
+            
+            echo '<div class="quiz-form-section">';
+            
+            // Filtra apenas campos do tipo radio e select
+            foreach ($form_data['fields'] as $field) {
+                if (in_array($field['type'], ['radio', 'select'])) {
+                    $has_quiz_fields = true;
+                    $field_id = $field['id'];
+                    
+                    // Obtém a resposta salva para este campo
+                    $saved_answer = isset($saved_answers[$field_id]) ? 
+                                  $saved_answers[$field_id]->correct_answer : '';
+                    
+                    echo '<div class="quiz-question-settings">';
+                    echo '<div class="quiz-question-info">';
+                    echo '<p><strong>Pergunta:</strong> ' . esc_html($field['label']) . '</p>';
+                    echo '<span>Tipo: ' . ucfirst($field['type']) . ' | ID: ' . $field['id'] . '</span>';
+                    echo '</div>';
+                    
+                    echo '<label>Selecione a resposta correta:</label>';
+                    echo '<select name="quiz_correct_answer_' . $field_id . '" 
+                             data-form-id="' . $current_form_id . '" 
+                             data-field-id="' . $field_id . '" 
+                             class="quiz-answer-select">';
+                    echo '<option value="">Selecione uma resposta</option>';
+                    
+                    if (!empty($field['choices'])) {
+                        foreach ($field['choices'] as $choice) {
+                            // Compara com a resposta salva
+                            $selected = ($saved_answer === $choice['label']) ? 'selected="selected"' : '';
+                            echo '<option value="' . esc_attr($choice['label']) . '" ' . $selected . '>';
+                            echo esc_html($choice['label']);
+                            echo '</option>';
                         }
-                        
-                        echo '</select>';
-                        echo '</div>';
-                        
-                        // Adiciona espaço e divisor após cada pergunta
-                        echo '<div style="margin: 20px 0;"><hr></div>';
                     }
+                    
+                    echo '</select>';
+                    
+                    // Adiciona indicador visual se há resposta salva
+                    if ($saved_answer) {
+                        echo '<div class="answer-saved-indicator" style="color: #2271b1; margin-top: 5px;">';
+                        echo '<span class="dashicons dashicons-saved"></span> Resposta salva';
+                        echo '</div>';
+                    }
+                    
+                    echo '</div>';
+                    echo '<hr>';
                 }
-                
-                if (!$has_quiz_fields) {
-                    echo '<p>Este formulário não possui campos de múltipla escolha ou seleção.</p>';
-                }
-                
+            }
+            
+            if (!$has_quiz_fields) {
+                echo '<p>Este formulário não possui campos de múltipla escolha ou seleção.</p>';
+            } else {
+                echo '<div class="wpforms-setting-row quiz-save-button">';
+                echo '<button class="wpforms-btn wpforms-btn-primary" id="save-quiz-settings">';
+                echo '<span class="dashicons dashicons-saved"></span> Salvar Configurações</button>';
+                echo '<span class="spinner"></span>';
                 echo '</div>';
             }
+            
+            echo '</div>';
         }
         
-        echo '<div class="wpforms-setting-row quiz-save-button">';
-        echo '<button class="wpforms-btn wpforms-btn-primary wpforms-btn-orange" id="save-quiz-settings" style="padding: 10px 20px;"><span class="dashicons dashicons-saved" style="margin-right: 5px;"></span>Salvar Perguntas</button>';
-        echo '<span class="spinner" style="float: none; margin-left: 10px;"></span>';
         echo '</div>';
-        
-        echo '</div>';
+    }
 
-        // Atualiza o JavaScript para melhor feedback
-        $this->add_settings_script();
+    private function get_saved_answer($form_id, $field_id) {
+        global $wpdb;
+        
+        $result = $wpdb->get_var($wpdb->prepare(
+            "SELECT answer FROM {$wpdb->prefix}wpforms_quiz_answers 
+             WHERE form_id = %d AND field_id = %d",
+            $form_id,
+            $field_id
+        ));
+        
+        return $result;
     }
 
     public function create_answers_table() {
@@ -306,116 +301,49 @@ class WPForms_Quiz_Score {
     }
 
     public function save_quiz_settings() {
-        error_log('🎯 sétimo save_quiz_settings');
-        error_log('📝 Quiz Score: Requisição recebida');
-        
-        // Verifica nonce
-        if (!check_ajax_referer('wpforms-builder', 'nonce', false)) {
-            error_log('❌ Quiz Score: Nonce inválido');
-            wp_send_json_error(['message' => 'Nonce inválido']);
+        // Verifica o nonce
+        if (!check_ajax_referer('wpforms-quiz', 'nonce', false)) {
+            wp_send_json_error(array(
+                'message' => 'Nonce inválido. Por favor, recarregue a página e tente novamente.'
+            ));
             return;
         }
-        
-        if (empty($_POST['settings'])) {
-            error_log('❌ Quiz Score: Nenhuma configuração recebida');
-            wp_send_json_error(['message' => 'Nenhuma configuração recebida']);
+
+        $form_id = isset($_POST['form_id']) ? absint($_POST['form_id']) : 0;
+        $settings = isset($_POST['settings']) ? $_POST['settings'] : array();
+
+        if (!$form_id || empty($settings)) {
+            wp_send_json_error(array('message' => 'Dados inválidos'));
             return;
         }
-        
-        $settings = $_POST['settings'];
+
+        global $wpdb;
         $success = true;
-        $saved_count = 0;
-        
-        error_log('📝 Quiz Score: Processando configurações: ' . print_r($settings, true));
-        
-        foreach ($settings as $key => $value) {
-            // Se value for array, converte para string para debug
-            $value_str = is_array($value) ? json_encode($value) : $value;
-            error_log("Processando resposta - Chave: $key, Valor: $value_str");
-            
-            // Extrai form_id e field_id da chave
-            if (is_array($value) && isset($value['form_id']) && isset($value['field_id'])) {
-                $form_id = intval($value['form_id']);
-                $field_id = intval($value['field_id']);
-                $answer = sanitize_text_field($value['answer']);
-                
-                error_log("Tentando salvar - Form: $form_id, Campo: $field_id, Resposta: $answer");
-                
-                if ($this->save_correct_answer($form_id, $field_id, $answer)) {
-                    $saved_count++;
-                    error_log("✅ Resposta salva com sucesso");
-                } else {
-                    $success = false;
-                    error_log("❌ Erro ao salvar resposta");
-                }
-            } else {
-                error_log("❌ Formato inválido para a resposta: " . print_r($value, true));
+        $errors = array();
+
+        foreach ($settings as $key => $data) {
+            $result = $wpdb->replace(
+                $wpdb->prefix . 'wpforms_quiz_answers',
+                array(
+                    'form_id' => $form_id,
+                    'field_id' => absint($data['field_id']),
+                    'correct_answer' => sanitize_text_field($data['answer']),
+                    'answer_type' => 'quiz'
+                ),
+                array('%d', '%d', '%s', '%s')
+            );
+
+            if ($result === false) {
+                $success = false;
+                $errors[] = "Erro ao salvar resposta para o campo {$data['field_id']}";
             }
         }
-        
-        $response = [
-            'message' => $success ? "$saved_count respostas salvas com sucesso" : 'Erro ao salvar respostas',
-            'saved_count' => $saved_count
-        ];
-        
-        error_log('📝 Quiz Score: Finalizando - ' . ($success ? '✅ Sucesso' : '❌ Erro'));
-        
+
         if ($success) {
-            wp_send_json_success($response);
+            wp_send_json_success(array('message' => 'Configurações salvas com sucesso'));
         } else {
-            wp_send_json_error($response);
+            wp_send_json_error(array('message' => implode(', ', $errors)));
         }
-    }
-
-    private function save_correct_answer($form_id, $field_id, $answer) {
-        error_log('🎯 oitavo save_correct_answer');
-        global $wpdb;
-        
-        error_log("📝 Quiz Score: Tentando salvar na tabela: " . $this->table_name);
-        error_log("Dados: Form ID = $form_id, Field ID = $field_id, Resposta = $answer");
-        
-        // Verifica se a tabela existe
-        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$this->table_name}'") === $this->table_name;
-        if (!$table_exists) {
-            error_log("❌ Quiz Score: Tabela {$this->table_name} não existe!");
-            return false;
-        }
-        
-        // Tenta inserir/atualizar no banco
-        $result = $wpdb->replace(
-            $this->table_name,
-            array(
-                'form_id' => $form_id,
-                'field_id' => $field_id,
-                'correct_answer' => sanitize_text_field($answer)
-            ),
-            array('%d', '%d', '%s')
-        );
-        
-        if ($result === false) {
-            error_log("❌ Quiz Score: Erro ao salvar - " . $wpdb->last_error);
-            return false;
-        }
-        
-        error_log("✅ Quiz Score: Resposta salva com sucesso na tabela {$this->table_name}");
-        return true;
-    }
-
-    private function get_saved_answer($form_id, $field_id) {
-        global $wpdb;
-        
-        $answer = $wpdb->get_var($wpdb->prepare(
-            "SELECT correct_answer 
-            FROM {$this->table_name} 
-            WHERE form_id = %d 
-            AND field_id = %d",
-            $form_id,
-            $field_id
-        ));
-        
-        error_log("Buscando resposta - Form ID: $form_id, Field ID: $field_id, Resposta: " . ($answer ?: 'não encontrada'));
-        
-        return $answer;
     }
 
     private function add_settings_script() {
@@ -687,6 +615,13 @@ class WPForms_Quiz_Score {
                     Salvar Campo
                   </button>';
             echo '<span class="spinner" style="float: none; margin: 0 5px;"></span>';
+            echo '</div>';
+            
+            echo '<div style="margin-top: 10px;">';
+            echo '<label style="display: flex; align-items: center; gap: 5px;">';
+            echo '<input type="checkbox" name="hide_score_field" id="hide_score_field">';
+            echo '<span>Ocultar este campo após preenchimento</span>';
+            echo '</label>';
             echo '</div>';
             
             echo '<p class="description">Selecione o campo numérico onde a pontuação será exibida automaticamente.</p>';

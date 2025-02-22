@@ -334,28 +334,35 @@
                 return;
             }
 
+            const data = new FormData();
+            data.append('action', 'save_quiz_score_field');
+            data.append('nonce', wpformsQuizData.nonce); 
+            data.append('form_id', formId);
+            data.append('field_id', fieldId);
+            console.log('🔍 Dados enviados:', data);
+            console.log('🔍 URL:', wpformsQuizData.ajaxurl);
+            console.log('🔍 Form ID:', formId);
+            console.log('🔍 Field ID:', fieldId);
+            console.log('🔍 Nonce:', wpformsQuizData.nonce);
+
             $.ajax({
                 url: wpformsQuizData.ajaxurl,
-                type: 'POST',
-                data: {
-                    action: 'save_quiz_score_field',
-                    nonce: wpformsQuizData.nonce,
-                    form_id: wpformsQuizData.formId,
-                    field_id: fieldId
-                },
-                success: function(response) {
-                    console.log('Resposta:', response);
+                method: 'POST',
+            data: data,
+                processData: false,
+                contentType: false,
+                success: (response) => {
                     if (response.success) {
-                        alert('Campo salvo com sucesso!');
+                        console.log('✅ Resposta do servidor:', response);
                     } else {
-                        alert('Erro ao salvar: ' + (response.data?.message || 'Erro desconhecido'));
+                        console.error('❌ Erro do servidor:', response);
                     }
                 },
-                error: function(error) {
-                    console.error('Erro Ajax:', error);
-                    alert('Erro ao salvar campo');
+                error: (error) => {
+                    console.error('❌ Erro na requisição:', error);
+                    console.groupEnd();
                 },
-                complete: function() {
+                complete: () => {
                     console.groupEnd();
                 }
             });

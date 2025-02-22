@@ -368,6 +368,8 @@
                     console.log('🔍 Form ID:', formId);
                     console.log('🔍 Field ID:', fieldId);
                     console.log('🔍 Nonce:', wpformsQuizData.nonce);
+                    console.log('🔍 wpformsQuizData:', wpformsQuizData);
+                    
                     console.groupEnd();
                 },
                 complete: () => {

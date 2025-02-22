@@ -31,15 +31,15 @@
             // Busca o ID do formulário no DOM
             let formId = null;
             console.log('🔍 Iniciando busca do formId...');
-            
-            const formElement = document.querySelector('form[id^="wpforms-form-"]');
+
+            window.formElement = document.querySelector('form[id^="wpforms-form-"]');
             console.log('🔍 Form element encontrado:', formElement);
-            
+
             if (formElement) {
                 console.log('🔍 ID do form element:', formElement.id);
-                const matches = formElement.id.match(/wpforms-form-(\d+)/);
+                window.matches = formElement.id.match(/wpforms-form-(\d+)/);
                 console.log('🔍 Matches do regex:', matches);
-                
+
                 if (matches) {
                     formId = matches[1];
                     console.log('✅ Form ID encontrado no DOM:', formId);
@@ -52,7 +52,7 @@
 
             // Fallback para wpformsQuizData
             console.log('🔍 Verificando wpformsQuizData:', wpformsQuizData);
-            
+
             if (!formId && wpformsQuizData.formId) {
                 formId = wpformsQuizData.formId;
                 console.log('✅ Form ID obtido do wpformsQuizData:', formId);
@@ -73,7 +73,8 @@
                 console.log('URL:', wpformsQuizData.ajaxurl);
                 console.log('Form ID:', formId);
                 console.log('Nonce:', wpformsQuizData.nonce);
-                
+                window.formId = formId;
+
                 return new Promise((resolve, reject) => {
                     $.ajax({
                         url: wpformsQuizData.ajaxurl,
@@ -90,13 +91,15 @@
                                 this.respostasCorretas = {};
 
                                 Object.entries(response.data).forEach(([key, value]) => {
-                                    console.log('🔍 Processando resposta:', {key, value});
+                                    console.log('🔍 Processando resposta:', { key, value });
                                     if (value.type === 'score_field') {
                                         wpformsQuizData.scoreFieldId = key;
+                                        window.scoreFieldId = wpformsQuizData.scoreFieldId;
+                                        console.log('🔍 scoreFieldId:', window.scoreFieldId);
                                         console.log('📊 Campo de pontuação definido:', key);
                                     } else {
                                         this.respostasCorretas[key] = value.answer;
-                                        console.log('✅ Resposta correta registrada:', {campo: key, resposta: value.answer});
+                                        console.log('✅ Resposta correta registrada:', { campo: key, resposta: value.answer });
                                     }
                                 });
 
@@ -162,7 +165,7 @@
                 campo: fieldId,
                 selecionada: respostaSelecionada,
                 correta: this.respostasCorretas[fieldId],
-                valorQuestao: this.valorQuestao
+                valorQuestao: window.pontos = this.valorQuestao
             });
 
             // Remove pontos anteriores desta questão se houver
@@ -226,147 +229,57 @@
         atualizarPontuacao() {
             console.group('🎯 Atualizando Pontuação');
 
-            const pontos = this.calcularPontuacao();
-            const notaDecimal = Math.round(pontos * 10) / 10;
+            // Usa this.pontos ao invés de window.pontos
+            const notaDecimal = Math.round(this.pontos * 10) / 10;
             const notaInteira = Math.round(notaDecimal);
-
-            console.log('📊 Notas calculadas:', {
-                decimal: notaDecimal,
-                inteira: notaInteira
-            });
-
-            // Atualiza a div com o ID do campo de pontuação
-            const scoreFieldId = wpformsQuizData.scoreFieldId;
-            console.log('🔍 scoreFieldId:', scoreFieldId);
-
-            if (scoreFieldId) {
-                // Tenta diferentes seletores para encontrar o elemento
-                let scoreElement = document.querySelector(`#wpforms-${wpformsQuizData.formId}-field_${scoreFieldId}`);
-                console.log('🔍 scoreElement:', scoreElement);
-
-                if (scoreElement) {
-                    // Verifica se o elemento foi encontrado e tem um ID válido
-                    if (scoreElement.id) {
-                        console.log('✅ Atualizando elemento com ID:', scoreElement.id);
-                        
-                        // Atualiza o valor baseado no tipo de elemento
-                        if (scoreElement.tagName === 'INPUT') {
-                            scoreElement.value = notaInteira;
-                            // Dispara evento de mudança
-                            scoreElement.dispatchEvent(new Event('change', { bubbles: true }));
-                        } else {
-                            scoreElement.textContent = notaInteira;
-                        }
-                    }
-                } else {
-                    // Se não encontrou o elemento principal, tenta outros seletores
-                    const formElement = document.querySelector('form[id^="wpforms-form-"]');
-                    
-                    if (formElement) {
-                        const matches = formElement.id.match(/wpforms-form-(\d+)/);
-                        if (matches) {
-                            wpformsQuizData.formId = matches[1];
-                            console.log('🔍 Form ID encontrado no DOM:', wpformsQuizData.formId);
-                            
-                            const altScoreElement = document.querySelector(`[data-field="${scoreFieldId}"]`) ||
-                                document.querySelector(`#wpforms-field-${scoreFieldId}`);
-                            console.log('🔍 altScoreElement:', altScoreElement);
-
-                            if (altScoreElement) {
-                                if (altScoreElement.tagName === 'INPUT') {
-                                    altScoreElement.value = notaInteira;
-                                    altScoreElement.dispatchEvent(new Event('change', { bubbles: true }));
-                                } else {
-                                    altScoreElement.textContent = notaInteira;
-                                }
-                            } else {
-                                console.error('❌ Elemento de pontuação não encontrado');
-                            }
-                        }
-                    }
-                }
             
-                // Atualiza os displays adicionais se existirem 
-                if (typeof this.atualizarDisplays === 'function') {
-                    this.atualizarDisplays(notaDecimal);
-                }
-
-                console.groupEnd();
-            }
-        }
-
-        calcularPontuacao() {
-            console.group('🎯 Calculando Pontuação');
-            // Verifica se wpformsQuizData está disponível
-            if (typeof wpformsQuizData === 'undefined') {
-                console.error('❌ wpformsQuizData não está definido');
-                return;
-            }
-
-            // Obtém o formulário dinamicamente usando os atributos da imagem
-            const formId = document.querySelector('form[data-id]')?.dataset?.id || wpformsQuizData.formId;
-            console.log('🔍 formId', formId);
-
-            if (!formId) {
-                console.error('❌ Formulário não encontrado');
-                console.groupEnd();
-                return 0;
-            }
-
-            // Busca o formulário usando os atributos name e id
-            const form = document.querySelector(`form[name="wpforms-builder"][id="wpforms-builder-form"]`) || 
-                        document.querySelector(`#wpforms-form-${formId}`);
-
-            // Busca campos de resposta (radio e select) dentro do formulário
-            const camposResposta = form ? form.querySelectorAll('input[type="radio"]:checked, select') : [];
-            const totalCampos = this.respostasCorretas ? Object.keys(this.respostasCorretas).length : 0;
-
-            console.log('🔍 form', form);
-            console.log('🔍 camposResposta', camposResposta); 
-            console.log('🔍 totalCampos', totalCampos);
-
-            console.log('📊 Total de campos:', totalCampos);
-
-            if (!totalCampos) {
-                console.error('❌ Nenhuma resposta correta cadastrada');
-                console.groupEnd();
-                return 0;
-            }
-
-            let pontosAcumulados = 0;
-            const valorPorQuestao = 10 / totalCampos; // Cada questão vale uma parte igual de 10
-
-            camposResposta.forEach(campo => {
-                const fieldId = this.getFieldId(campo);
-                if (!fieldId) return;
-
-                const respostaCorreta = this.respostasCorretas[fieldId];
-                const respostaUsuario = campo.value;
-
-                console.log('🔍 Verificando campo:', {
-                    fieldId,
-                    respostaUsuario,
-                    respostaCorreta,
-                    valorQuestao: valorPorQuestao
-                });
-
-                if (respostaCorreta && respostaUsuario === respostaCorreta) {
-                    pontosAcumulados += valorPorQuestao;
-                    console.log('✅ Resposta correta! Pontos acumulados:', pontosAcumulados);
-                }
+            console.log('📊 Dados:', {
+                pontos: this.pontos,
+                notaDecimal: notaDecimal,
+                notaInteira: notaInteira,
+                formId: wpformsQuizData.formId,
+                scoreFieldId: wpformsQuizData.scoreFieldId
             });
 
-            // Calcula a nota final (regra de 3)
-            const notaFinal = (pontosAcumulados / totalCampos) * 10;
+            // Tenta encontrar o campo de pontuação
+            // Log do seletor específico para debug
+            console.log('🔍 Buscando campo:', `#wpforms-${formId}-field_${wpformsQuizData.scoreFieldId}`);
+            console.log('🔍 Elemento encontrado:', document.querySelector(`#wpforms-${formId}-field_${wpformsQuizData.scoreFieldId}`));
 
-            console.log('📝 Resultado:', {
-                acertos: pontosAcumulados,
-                total: totalCampos,
-                notaFinal: pontosAcumulados
+            const possiveisElementos = [
+                document.querySelector(`#wpforms-${formId}-field_${wpformsQuizData.scoreFieldId}`),
+                document.querySelector(`#wpforms-field_${wpformsQuizData.scoreFieldId}`),
+                document.querySelector(`[data-field="${wpformsQuizData.scoreFieldId}"]`),
+                document.querySelector('.quiz-score-display'),
+                document.querySelector('#quiz-score')
+            ];
+
+            // Usa o primeiro elemento válido encontrado
+            const scoreField = possiveisElementos.find(elem => elem !== null);
+            console.log('🔍 Campo de pontuação encontrado bojasjopd:', scoreField);
+
+            if (scoreField) {
+                try {
+                    if (scoreField.tagName === 'INPUT') {
+                        scoreField.value = notaInteira;
+                        scoreField.dispatchEvent(new Event('change', { bubbles: true }));
+                    } else {
+                        scoreField.textContent = notaDecimal.toFixed(1);
+                    }
+                    console.log('✅ Pontuação atualizada:', scoreField);
+                } catch (erro) {
+                    console.error('❌ Erro ao atualizar pontuação:', erro);
+                }
+            } else {
+                console.warn('⚠️ Campo de pontuação não encontrado');
+            }
+
+            // Atualiza displays adicionais
+            document.querySelectorAll('.quiz-score-display').forEach(display => {
+                display.textContent = notaDecimal.toFixed(1);
             });
 
             console.groupEnd();
-            return pontosAcumulados;
         }
 
         extrairFieldId(elemento) {
@@ -530,11 +443,32 @@
         }
 
         atualizarDisplays(notaDecimal) {
+            console.group('🎯 Atualizando Displays');
+            
             // Atualiza displays da pontuação
-            const displays = document.querySelectorAll(`.quiz-score-display[data-form-id="${wpformsQuizData.formId}"]`);
+            const displays = document.querySelectorAll('.quiz-score-display');
+            console.log('🔍 Buscando displays de pontuação');
+            
+            if (displays.length === 0) {
+                console.warn('⚠️ Nenhum display encontrado');
+                console.groupEnd();
+                return;
+            }
+
+            console.log(`✅ ${displays.length} displays encontrados`);
+            
             displays.forEach(display => {
-                display.textContent = notaDecimal;
+                const oldValue = display.textContent;
+                display.textContent = notaDecimal.toFixed(1);
+                console.log(`📊 Display atualizado: ${oldValue} -> ${notaDecimal.toFixed(1)}`);
             });
+
+            // Dispara evento de atualização
+            document.dispatchEvent(new CustomEvent('quizScoreDisplayUpdated', {
+                detail: { score: notaDecimal }
+            }));
+
+            console.groupEnd();
         }
     }
 
@@ -543,7 +477,7 @@
         new WPFormsQuizScore();
     });
 
-    // Adicione isso dentro do método add_settings_script()
+    // Substitua o evento de salvar existente por este
     $('#save-quiz-settings').on('click', function (e) {
         e.preventDefault();
 
@@ -571,7 +505,6 @@
             }
         });
 
-        // Debug
         console.group('💾 Salvando Configurações Quiz');
         console.log('Settings:', settings);
 
@@ -598,7 +531,6 @@
                 alert('Erro ao salvar configurações');
             },
             complete: function () {
-                // Reabilita o botão e esconde o spinner
                 $button.prop('disabled', false);
                 $spinner.css('visibility', 'hidden');
                 console.groupEnd();

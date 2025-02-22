@@ -342,28 +342,30 @@
             }
 
             const data = new FormData();
-            data.append('action', 'save_quiz_score_field');
+            data.append('action', 'save_quiz_score_field'); 
             data.append('nonce', wpformsQuizData.nonce);
             data.append('form_id', formId);
             data.append('field_id', fieldId);
 
-            fetch(wpformsQuizData.ajaxurl, {
+            $.ajax({
+                url: wpformsQuizData.ajaxurl,
                 method: 'POST',
-                body: data
-            })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        console.log('✅ Resposta do servidor:', data);
+                data: data,
+                processData: false,
+                contentType: false,
+                success: (response) => {
+                    if (response.success) {
+                        console.log('✅ Resposta do servidor:', response);
                     } else {
-                        console.error('❌ Erro do servidor:', data);
+                        console.error('❌ Erro do servidor:', response);
                     }
                     console.groupEnd();
-                })
-                .catch(error => {
+                },
+                error: (error) => {
                     console.error('❌ Erro na requisição:', error);
                     console.groupEnd();
-                });
+                }
+            });
         }
 
         initScoreFieldSave() {

@@ -328,13 +328,6 @@
         }
 
         saveScoreField(fieldId) {
-            const formId = new URLSearchParams(window.location.search).get('form_id');
-            console.group('🎯 Salvando Campo de Pontuação');
-            console.log('Dados:', {
-                formId: formId,
-                fieldId: fieldId
-            });
-
             if (!formId || !fieldId) {
                 console.error('❌ IDs inválidos');
                 console.groupEnd();
@@ -342,17 +335,20 @@
             }
 
             const data = new FormData();
-            data.append('action', 'save_quiz_score_field'); 
-            data.append('nonce', wpformsQuizData.nonce);
+            data.append('action', 'save_quiz_score_field');
+            data.append('nonce', wpformsQuizData.nonce); 
             data.append('form_id', formId);
             data.append('field_id', fieldId);
 
             $.ajax({
                 url: wpformsQuizData.ajaxurl,
                 method: 'POST',
-                data: data,
-                processData: false,
-                contentType: false,
+                data: {
+                    action: 'save_quiz_score_field',
+                    nonce: wpformsQuizData.nonce,
+                    form_id: formId,
+                    field_id: fieldId
+                },
                 success: (response) => {
                     if (response.success) {
                         console.log('✅ Resposta do servidor:', response);

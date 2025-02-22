@@ -334,31 +334,28 @@
                 return;
             }
 
-            const data = new FormData();
-            data.append('action', 'save_quiz_score_field');
-            data.append('nonce', wpformsQuizData.nonce); 
-            data.append('form_id', formId);
-            data.append('field_id', fieldId);
-
             $.ajax({
                 url: wpformsQuizData.ajaxurl,
-                method: 'POST',
+                type: 'POST',
                 data: {
                     action: 'save_quiz_score_field',
                     nonce: wpformsQuizData.nonce,
-                    form_id: formId,
+                    form_id: wpformsQuizData.formId,
                     field_id: fieldId
                 },
-                success: (response) => {
+                success: function(response) {
+                    console.log('Resposta:', response);
                     if (response.success) {
-                        console.log('✅ Resposta do servidor:', response);
+                        alert('Campo salvo com sucesso!');
                     } else {
-                        console.error('❌ Erro do servidor:', response);
+                        alert('Erro ao salvar: ' + (response.data?.message || 'Erro desconhecido'));
                     }
-                    console.groupEnd();
                 },
-                error: (error) => {
-                    console.error('❌ Erro na requisição:', error);
+                error: function(error) {
+                    console.error('Erro Ajax:', error);
+                    alert('Erro ao salvar campo');
+                },
+                complete: function() {
                     console.groupEnd();
                 }
             });

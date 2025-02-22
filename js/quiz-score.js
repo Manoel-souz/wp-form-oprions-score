@@ -363,6 +363,7 @@
                 error: (error) => {
                     console.error('❌ Erro na requisição:', error);
                     console.log('🔍 Dados enviados:', data);
+                    const ajaxurl = wpformsQuizData.ajaxurl;
                     console.log('🔍 URL:', wpformsQuizData.ajaxurl);
                     console.log('🔍 ajaxurl:', ajaxurl);
                     console.log('🔍 Form ID:', formId);

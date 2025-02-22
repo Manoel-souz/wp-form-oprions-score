@@ -74,6 +74,7 @@
                 console.log('Form ID:', formId);
                 console.log('Nonce:', wpformsQuizData.nonce);
                 window.formId = formId;
+                window.ajaxurl = wpformsQuizData.ajaxurl;
 
                 return new Promise((resolve, reject) => {
                     $.ajax({
@@ -341,6 +342,7 @@
             data.append('field_id', fieldId);
             console.log('🔍 Dados enviados:', data);
             console.log('🔍 URL:', wpformsQuizData.ajaxurl);
+            console.log('🔍 ajaxurl:', ajaxurl);
             console.log('🔍 Form ID:', formId);
             console.log('🔍 Field ID:', fieldId);
             console.log('🔍 Nonce:', wpformsQuizData.nonce);
@@ -360,6 +362,12 @@
                 },
                 error: (error) => {
                     console.error('❌ Erro na requisição:', error);
+                    console.log('🔍 Dados enviados:', data);
+                    console.log('🔍 URL:', wpformsQuizData.ajaxurl);
+                    console.log('🔍 ajaxurl:', ajaxurl);
+                    console.log('🔍 Form ID:', formId);
+                    console.log('🔍 Field ID:', fieldId);
+                    console.log('🔍 Nonce:', wpformsQuizData.nonce);
                     console.groupEnd();
                 },
                 complete: () => {

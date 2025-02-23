@@ -363,7 +363,6 @@
                 error: (error) => {
                     console.error('❌ Erro na requisição:', error);
                     console.log('🔍 Dados enviados:', data);
-                    const ajaxurl = wpformsQuizData.ajaxurl;
                     console.log('🔍 URL:', wpformsQuizData.ajaxurl);
                     console.log('🔍 ajaxurl:', ajaxurl);
                     console.log('🔍 Form ID:', formId);
@@ -380,54 +379,79 @@
         }
 
         initScoreFieldSave() {
-            console.log('🔍 Inicializando salvamento do campo');
-
-            const saveButton = $('#save-score-field');
-            const select = $('#quiz_score_field');
+            console.group('🔍 Inicializando salvamento do campo');
+            
+            const saveButton = $('#save-quiz-settings');
+            const select = $('.quiz-answer-select');
 
             if (saveButton.length && select.length) {
-                saveButton.on('click', () => {
+                saveButton.on('click', (e) => {
+                    e.preventDefault();
                     console.log('🔔 Botão clicado');
 
-                    const fieldId = select.val();
-                    const formId = select.data('formId');
+                    // Obtém os dados do formulário
+                    const formId = select.first().data('form-id');
+                    const settings = {};
 
-                    if (!fieldId || !formId) {
-                        console.error('❌ IDs inválidos');
+                    // Coleta todas as respostas selecionadas
+                    $('.quiz-answer-select').each(function() {
+                        const $select = $(this);
+                        const fieldId = $select.data('field-id');
+                        const answer = $select.val();
+
+                        if (answer) {
+                            settings[fieldId] = {
+                                form_id: formId,
+                                field_id: fieldId,
+                                answer: answer
+                            };
+                        }
+                    });
+
+                    if (Object.keys(settings).length === 0) {
+                        alert('Selecione pelo menos uma resposta');
                         return;
                     }
 
-                    const spinner = saveButton.next('.spinner');
+                    // Mostra loading
+                    const $spinner = saveButton.next('.spinner');
                     saveButton.prop('disabled', true);
-                    spinner.css('visibility', 'visible');
+                    $spinner.css('visibility', 'visible');
 
+                    // Envia para o servidor
                     $.ajax({
                         url: wpformsQuizData.ajaxurl,
                         type: 'POST',
                         data: {
-                            action: 'save_quiz_score_field',
+                            action: 'save_quiz_settings',
                             nonce: wpformsQuizData.nonce,
                             form_id: formId,
-                            field_id: fieldId
+                            settings: settings
                         },
-                        success: function (response) {
+                        success: function(response) {
+                            console.log('✅ Resposta:', response);
                             if (response.success) {
-                                alert('Campo salvo com sucesso!');
+                                alert('Configurações salvas com sucesso!');
                             } else {
                                 alert('Erro ao salvar: ' + (response.data?.message || 'Erro desconhecido'));
                             }
                         },
-                        error: function (error) {
-                            console.error('❌ Erro:', error);
-                            alert('Erro ao salvar campo');
+                        error: function(xhr, status, error) {
+                            console.error('❌ Erro:', {xhr, status, error});
+                            alert('Erro ao salvar configurações');
                         },
-                        complete: function () {
+                        complete: function() {
                             saveButton.prop('disabled', false);
-                            spinner.css('visibility', 'hidden');
+                            $spinner.css('visibility', 'hidden');
+                            console.groupEnd();
                         }
                     });
                 });
+            } else {
+                console.warn('⚠️ Elementos não encontrados');
             }
+            
+            console.groupEnd();
         }
 
         showNotification(message, type = 'success') {

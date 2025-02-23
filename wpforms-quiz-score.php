@@ -319,12 +319,12 @@ class WPForms_Quiz_Score {
         }
 
         global $wpdb;
+        $table_name = $wpdb->prefix . 'wpforms_quiz_answers';
         $success = true;
-        $errors = array();
 
-        foreach ($settings as $key => $data) {
+        foreach ($settings as $field_id => $data) {
             $result = $wpdb->replace(
-                $wpdb->prefix . 'wpforms_quiz_answers',
+                $table_name,
                 array(
                     'form_id' => $form_id,
                     'field_id' => absint($data['field_id']),
@@ -336,14 +336,13 @@ class WPForms_Quiz_Score {
 
             if ($result === false) {
                 $success = false;
-                $errors[] = "Erro ao salvar resposta para o campo {$data['field_id']}";
             }
         }
 
         if ($success) {
             wp_send_json_success(array('message' => 'Configurações salvas com sucesso'));
         } else {
-            wp_send_json_error(array('message' => implode(', ', $errors)));
+            wp_send_json_error(array('message' => 'Erro ao salvar configurações'));
         }
     }
 
@@ -611,10 +610,6 @@ class WPForms_Quiz_Score {
             }
             echo '</select>';
             
-            echo '<button type="button" id="save-score-field" class="wpforms-btn wpforms-btn-md wpforms-btn-blue">
-                    <span class="dashicons dashicons-saved" style="margin-right: 5px;"></span>
-                    Salvar Campo
-                  </button>';
             echo '<span class="spinner" style="float: none; margin: 0 5px;"></span>';
             echo '</div>';
             

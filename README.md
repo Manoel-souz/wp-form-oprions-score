@@ -44,17 +44,6 @@ Um plugin WordPress que adiciona funcionalidade de pontuação automática para 
    - Adicione a classe `option-tot` onde deseja exibir a nota
    - Adicione um campo numérico com a classe `cond` para armazenar a nota
 
-## 🎯 Uso
-
-html
-
-```html
-<!-- Exemplo de campo para exibir a nota -->
-<div class="option-tot"></div>
-<!-- Exemplo de campo para armazenar a nota -->
-<input type="number" class="cond" readonly>
-```
-
 ## 🤝 Contribuindo
 
 1. Faça um Fork do projeto
@@ -71,9 +60,9 @@ Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para ma
 
 **Manoel de Souza**
 
-* Website: [seu-site.com](https://seu-site.com)
-* Github: [@seu-usuario](https://github.com/seu-usuario)
-* LinkedIn: [@seu-linkedin](https://linkedin.com/in/seu-linkedin)
+* Website: [optionstech.com.br](https://optionstech.com.br)
+* Github: [@manoel-souz](https://github.com/Manoel-souz)
+* LinkedIn: [@manoel-sz](https://www.linkedin.com/in/manoel-sz/)
 
 ## 🙏 Agradecimentos
 

@@ -153,13 +153,13 @@ class WPForms_Quiz_Score {
             return;
         }
 
-        // Busca todas as respostas salvas para este formulário
+        // Busca respostas salvas
         $saved_answers = $wpdb->get_results($wpdb->prepare(
-            "SELECT field_id, correct_answer 
+            "SELECT field_id, correct_answer, second_answer 
              FROM {$wpdb->prefix}wpforms_quiz_answers 
              WHERE form_id = %d",
             $current_form_id
-        ), OBJECT_K); // OBJECT_K usa field_id como chave
+        ), OBJECT_K);
 
         $form = wpforms()->form->get($current_form_id);
         if (empty($form)) {
@@ -188,6 +188,8 @@ class WPForms_Quiz_Score {
                     // Obtém a resposta salva para este campo
                     $saved_answer = isset($saved_answers[$field_id]) ? 
                                   $saved_answers[$field_id]->correct_answer : '';
+                    $saved_second_answer = isset($saved_answers[$field_id]) ? 
+                                  $saved_answers[$field_id]->second_answer : '';
                     
                     echo '<div class="quiz-question-settings">';
                     echo '<div class="quiz-question-info">';
@@ -195,11 +197,12 @@ class WPForms_Quiz_Score {
                     echo '<span>Tipo: ' . ucfirst($field['type']) . ' | ID: ' . $field['id'] . '</span>';
                     echo '</div>';
                     
-                    echo '<label>Selecione a resposta correta:</label>';
+                    // Primeira resposta (valor total)
+                    echo '<label>Selecione a resposta principal (valor total):</label>';
                     echo '<select name="quiz_correct_answer_' . $field_id . '" 
                              data-form-id="' . $current_form_id . '" 
                              data-field-id="' . $field_id . '" 
-                             class="quiz-answer-select">';
+                             class="quiz-answer-select primary-answer">';
                     echo '<option value="">Selecione uma resposta</option>';
                     
                     if (!empty($field['choices'])) {
@@ -213,13 +216,24 @@ class WPForms_Quiz_Score {
                     }
                     
                     echo '</select>';
+
+                    // Segunda resposta (metade do valor)
+                    echo '<label>Selecione a resposta secundária (metade do valor):</label>';
+                    echo '<select name="quiz_second_answer_' . $field_id . '" 
+                             data-form-id="' . $current_form_id . '" 
+                             data-field-id="' . $field_id . '" 
+                             class="quiz-answer-select secondary-answer">';
+                    echo '<option value="">Selecione uma resposta</option>';
                     
-                    // Adiciona indicador visual se há resposta salva
-                    if ($saved_answer) {
-                        echo '<div class="answer-saved-indicator" style="color: #2271b1; margin-top: 5px;">';
-                        echo '<span class="dashicons dashicons-saved"></span> Resposta salva';
-                        echo '</div>';
+                    if (!empty($field['choices'])) {
+                        foreach ($field['choices'] as $choice) {
+                            $selected = ($saved_second_answer === $choice['label']) ? 'selected="selected"' : '';
+                            echo '<option value="' . esc_attr($choice['label']) . '" ' . $selected . '>';
+                            echo esc_html($choice['label']);
+                            echo '</option>';
+                        }
                     }
+                    echo '</select>';
                     
                     echo '</div>';
                     echo '<hr>';
@@ -231,7 +245,7 @@ class WPForms_Quiz_Score {
             } else {
                 echo '<div class="wpforms-setting-row quiz-save-button">';
                 echo '<button class="wpforms-btn wpforms-btn-primary" id="save-quiz-settings">';
-                echo '<span class="dashicons dashicons-saved"></span> Salvar Configurações</button>';
+                echo 'Salvar Configurações</button>';
                 echo '<span class="spinner"></span>';
                 echo '</div>';
             }
@@ -271,6 +285,7 @@ class WPForms_Quiz_Score {
                 form_id bigint(20) NOT NULL,
                 field_id bigint(20) NOT NULL,
                 correct_answer text NOT NULL,
+                second_answer text DEFAULT NULL,
                 answer_type varchar(50) DEFAULT NULL,
                 field_type varchar(50) DEFAULT NULL,
                 created_at datetime DEFAULT CURRENT_TIMESTAMP,
@@ -280,26 +295,12 @@ class WPForms_Quiz_Score {
             ) $charset_collate;";
             
             require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+            dbDelta($sql);
             
-            // Tenta criar a tabela
-            $result = dbDelta($sql);
-            error_log('Resultado do dbDelta: ' . print_r($result, true));
-            
-            // Verifica se a tabela foi criada
-            $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name;
-            
-            if ($table_exists) {
-                // Verifica se a coluna answer_type existe
-                $column_exists = $wpdb->get_results("SHOW COLUMNS FROM $table_name LIKE 'answer_type'");
-                if (empty($column_exists)) {
-                    // Adiciona a coluna se não existir
-                    $wpdb->query("ALTER TABLE $table_name ADD COLUMN answer_type varchar(50) DEFAULT NULL AFTER correct_answer");
-                    error_log("✅ Quiz Score: Coluna answer_type adicionada à tabela $table_name");
-                }
-                error_log("✅ Quiz Score: Tabela $table_name atualizada com sucesso");
-            } else {
-                error_log("❌ Quiz Score: Erro ao criar tabela $table_name");
-                error_log("Último erro MySQL: " . $wpdb->last_error);
+            // Check if second_answer column exists
+            $column_exists = $wpdb->get_results("SHOW COLUMNS FROM $table_name LIKE 'second_answer'");
+            if (empty($column_exists)) {
+                $wpdb->query("ALTER TABLE $table_name ADD COLUMN second_answer text DEFAULT NULL AFTER correct_answer");
             }
             
         } catch (Exception $e) {
@@ -334,10 +335,11 @@ class WPForms_Quiz_Score {
                 array(
                     'form_id' => $form_id,
                     'field_id' => absint($data['field_id']),
-                    'correct_answer' => sanitize_text_field($data['answer']),
+                    'correct_answer' => sanitize_text_field($data['primary_answer']),
+                    'second_answer' => sanitize_text_field($data['secondary_answer']),
                     'answer_type' => 'quiz'
                 ),
-                array('%d', '%d', '%s', '%s')
+                array('%d', '%d', '%s', '%s', '%s')
             );
 
             if ($result === false) {
@@ -375,13 +377,13 @@ class WPForms_Quiz_Score {
                         settings[key] = {
                             form_id: form_id,
                             field_id: field_id,
-                            answer: answer
+                            primary_answer: answer
                         };
                         
                         console.log('Resposta coletada:', {
                             form_id: form_id,
                             field_id: field_id,
-                            answer: answer
+                            primary_answer: answer
                         });
                     }
                 });
@@ -488,7 +490,7 @@ class WPForms_Quiz_Score {
 
         // Busca todas as respostas corretas para o formulário
         $respostas = $wpdb->get_results($wpdb->prepare(
-            "SELECT field_id, correct_answer, answer_type 
+            "SELECT field_id, correct_answer, second_answer, answer_type 
             FROM {$this->table_name} 
             WHERE form_id = %d",
             $form_id
@@ -504,7 +506,8 @@ class WPForms_Quiz_Score {
         $respostas_formatadas = array();
         foreach ($respostas as $resposta) {
             $respostas_formatadas[$resposta->field_id] = array(
-                'answer' => $resposta->correct_answer,
+                'primary_answer' => $resposta->correct_answer,
+                'secondary_answer' => $resposta->second_answer,
                 'type' => $resposta->answer_type
             );
         }
@@ -709,6 +712,7 @@ class WPForms_Quiz_Score {
                     'field_id' => $field_id,
                     'answer_type' => 'score_field',
                     'correct_answer' => '',
+                    'second_answer' => '',
                     'updated_at' => current_time('mysql')
                 ),
                 array(
@@ -727,10 +731,11 @@ class WPForms_Quiz_Score {
                     'field_id' => $field_id,
                     'answer_type' => 'score_field',
                     'correct_answer' => '',
+                    'second_answer' => '',
                     'created_at' => current_time('mysql'),
                     'updated_at' => current_time('mysql')
                 ),
-                array('%d', '%d', '%s', '%s', '%s', '%s')
+                array('%d', '%d', '%s', '%s', '%s', '%s', '%s')
             );
         }
 

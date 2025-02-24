@@ -99,29 +99,30 @@
                                         console.log('🔍 scoreFieldId:', window.scoreFieldId);
                                         console.log('📊 Campo de pontuação definido:', key);
                                     } else {
-                                        this.respostasCorretas[key] = value.answer;
-                                        console.log('✅ Resposta correta registrada:', { campo: key, resposta: value.answer });
+                                        this.respostasCorretas[key] = {
+                                            primary_answer: value.primary_answer || '',
+                                            secondary_answer: value.secondary_answer || ''
+                                        };
+                                        console.log('✅ Resposta registrada:', {
+                                            campo: key,
+                                            primaria: value.primary_answer,
+                                            secundaria: value.secondary_answer
+                                        });
                                     }
                                 });
 
                                 console.log('✅ Todas respostas processadas:', this.respostasCorretas);
-
-                                if (!wpformsQuizData.scoreFieldId) {
-                                    console.warn('⚠️ Campo de pontuação não encontrado nos dados');
-                                }
                                 resolve();
                             } else {
-                                console.error('❌ Erro na resposta:', response ? response.data.message : 'Resposta inválida');
+                                console.error('❌ Erro na resposta:', response);
                                 reject();
                             }
                         },
                         error: (error) => {
-                            console.error('❌ Erro na requisição AJAX:', error);
-                            this.showNotification('Erro ao carregar respostas', 'error');
+                            console.error('❌ Erro na requisição:', error);
                             reject();
                         }
                     });
-                    console.groupEnd();
                 });
             };
 
@@ -155,46 +156,67 @@
         verificarResposta(event) {
             const input = event.target;
             const fieldId = this.getFieldId(input);
-            const respostaSelecionada = input.value;
-            console.log('🔍 Resposta selecionada:', respostaSelecionada);
-            console.log('🔍 Field ID:', fieldId);
-            console.log('🔍 Input:', input);
-
-            // Calcula o valor de cada questão (nota máxima 10 dividida pelo número de questões)
+            const respostaUsuario = input.value;
+            
+            console.log('🔍 Verificando resposta:', {
+                fieldId,
+                respostaUsuario,
+                respostasCorretas: this.respostasCorretas[fieldId]
+            });
+            
+            // Calculate value per question
             const totalQuestoes = Object.keys(this.respostasCorretas).length;
             this.valorQuestao = 10 / totalQuestoes;
 
-            console.group('🔍 Verificando Resposta');
-            console.log({
-                campo: fieldId,
-                selecionada: respostaSelecionada,
-                correta: this.respostasCorretas[fieldId],
-                valorQuestao: window.pontos = this.valorQuestao
-            });
-
-            // Remove pontos anteriores desta questão se houver
+            // Remove previous points for this question if any
             if (this.respostasAnteriores && this.respostasAnteriores[fieldId]) {
                 this.pontos -= this.respostasAnteriores[fieldId];
             }
 
-            // Inicializa objeto de respostas anteriores se não existir
+            // Initialize previous answers object if it doesn't exist
             if (!this.respostasAnteriores) {
                 this.respostasAnteriores = {};
             }
 
-            if (this.respostasCorretas[fieldId] === respostaSelecionada) {
-                console.log('✅ Resposta correta!');
+            const respostas = this.respostasCorretas[fieldId];
+            
+            if (!respostas) {
+                console.warn('⚠️ Nenhuma resposta encontrada para o campo:', fieldId);
+                return;
+            }
+
+            if (respostaUsuario === respostas.primary_answer) {
+                // Primary answer correct - full value
                 this.marcarCorreta(input);
                 this.respostasAnteriores[fieldId] = this.valorQuestao;
                 this.pontos += this.valorQuestao;
+                console.log('✅ Resposta principal correta! Pontos:', this.valorQuestao);
+            } else if (respostaUsuario === respostas.secondary_answer) {
+                // Secondary answer correct - half value
+                this.marcarCorreta(input);
+                this.respostasAnteriores[fieldId] = this.valorQuestao / 2;
+                this.pontos += this.valorQuestao / 2;
+                console.log('✅ Resposta secundária correta! Pontos:', this.valorQuestao / 2);
             } else {
-                console.log('❌ Resposta incorreta');
+                // Incorrect answer - 1/6 value
                 this.marcarIncorreta(input);
-                this.respostasAnteriores[fieldId] = 0;
+                this.respostasAnteriores[fieldId] = this.valorQuestao / 6;
+                this.pontos += this.valorQuestao / 6;
+                console.log('❌ Resposta incorreta! Pontos:', this.valorQuestao / 6);
             }
 
+            // Round to one decimal place
+            this.pontos = Math.round(this.pontos * 10) / 10;
+            
+            console.log('📊 Pontuação atualizada:', {
+                fieldId,
+                respostaUsuario,
+                respostasCorretas: respostas,
+                valorQuestao: this.valorQuestao,
+                pontosAtuais: this.pontos
+            });
+
             this.atualizarPontuacao();
-            console.groupEnd();
         }
 
         getFieldId(element) {
@@ -396,17 +418,19 @@
                     const formId = select.first().data('form-id');
                     const settings = {};
 
-                    // Coleta todas as respostas selecionadas
-                    $('.quiz-answer-select').each(function() {
-                        const $select = $(this);
-                        const fieldId = $select.data('field-id');
-                        const answer = $select.val();
+                    // Group selects by field_id
+                    $('.quiz-question-settings').each(function() {
+                        const $container = $(this);
+                        const fieldId = $container.find('.primary-answer').data('field-id');
+                        const primaryAnswer = $container.find('.primary-answer').val();
+                        const secondaryAnswer = $container.find('.secondary-answer').val();
 
-                        if (answer) {
+                        if (primaryAnswer || secondaryAnswer) {
                             settings[fieldId] = {
                                 form_id: formId,
                                 field_id: fieldId,
-                                answer: answer
+                                primary_answer: primaryAnswer || '',
+                                secondary_answer: secondaryAnswer || ''
                             };
                         }
                     });
@@ -443,18 +467,13 @@
                             console.error('❌ Erro:', {xhr, status, error});
                             alert('Erro ao salvar configurações');
                         },
-                        complete: function() {
+                        complete: () => {
                             saveButton.prop('disabled', false);
                             $spinner.css('visibility', 'hidden');
-                            console.groupEnd();
                         }
                     });
                 });
-            } else {
-                console.warn('⚠️ Elementos não encontrados');
             }
-            
-            console.groupEnd();
         }
 
         showNotification(message, type = 'success') {

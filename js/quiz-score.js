@@ -156,6 +156,9 @@
             const input = event.target;
             const fieldId = this.getFieldId(input);
             const respostaSelecionada = input.value;
+            console.log('🔍 Resposta selecionada:', respostaSelecionada);
+            console.log('🔍 Field ID:', fieldId);
+            console.log('🔍 Input:', input);
 
             // Calcula o valor de cada questão (nota máxima 10 dividida pelo número de questões)
             const totalQuestoes = Object.keys(this.respostasCorretas).length;

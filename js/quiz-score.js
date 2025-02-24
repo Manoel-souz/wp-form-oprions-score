@@ -10,6 +10,7 @@
             this.respostasCorretas = {};
             this.valorQuestao = 0;
             this.respostasAnteriores = {};
+            this.respostasIncorretas = new Map(); // Store incorrect/partially correct answers
 
             // Busca as respostas do banco via AJAX
             this.carregarRespostasCorretas();
@@ -158,11 +159,8 @@
             const fieldId = this.getFieldId(input);
             const respostaUsuario = input.value;
             
-            console.log('🔍 Verificando resposta:', {
-                fieldId,
-                respostaUsuario,
-                respostasCorretas: this.respostasCorretas[fieldId]
-            });
+            // Get question label
+            const questionLabel = this.getQuestionLabel(input);
             
             // Calculate value per question
             const totalQuestoes = Object.keys(this.respostasCorretas).length;
@@ -185,37 +183,42 @@
                 return;
             }
 
+            // Clear previous entry for this question
+            this.respostasIncorretas.delete(fieldId);
+
             if (respostaUsuario === respostas.primary_answer) {
                 // Primary answer correct - full value
                 this.marcarCorreta(input);
                 this.respostasAnteriores[fieldId] = this.valorQuestao;
                 this.pontos += this.valorQuestao;
-                console.log('✅ Resposta principal correta! Pontos:', this.valorQuestao);
-            } else if (respostaUsuario === respostas.secondary_answer) {
-                // Secondary answer correct - half value
-                this.marcarCorreta(input);
-                this.respostasAnteriores[fieldId] = this.valorQuestao / 2;
-                this.pontos += this.valorQuestao / 2;
-                console.log('✅ Resposta secundária correta! Pontos:', this.valorQuestao / 2);
             } else {
-                // Incorrect answer - 1/6 value
-                this.marcarIncorreta(input);
-                this.respostasAnteriores[fieldId] = this.valorQuestao / 6;
-                this.pontos += this.valorQuestao / 6;
-                console.log('❌ Resposta incorreta! Pontos:', this.valorQuestao / 6);
+                // Store information about incorrect/partially correct answer
+                this.respostasIncorretas.set(fieldId, {
+                    pergunta: questionLabel,
+                    respostaUsuario: respostaUsuario,
+                    respostaCorreta: respostas.primary_answer,
+                    respostaSecundaria: respostas.secondary_answer
+                });
+
+                if (respostaUsuario === respostas.secondary_answer) {
+                    // Secondary answer correct - half value
+                    this.marcarCorreta(input);
+                    this.respostasAnteriores[fieldId] = this.valorQuestao / 2;
+                    this.pontos += this.valorQuestao / 2;
+                } else {
+                    // Incorrect answer - 1/6 value
+                    this.marcarIncorreta(input);
+                    this.respostasAnteriores[fieldId] = this.valorQuestao / 6;
+                    this.pontos += this.valorQuestao / 6;
+                }
             }
 
+            // Update incorrect answers display
+            this.atualizarRespostasIncorretas();
+            
             // Round to one decimal place
             this.pontos = Math.round(this.pontos * 10) / 10;
             
-            console.log('📊 Pontuação atualizada:', {
-                fieldId,
-                respostaUsuario,
-                respostasCorretas: respostas,
-                valorQuestao: this.valorQuestao,
-                pontosAtuais: this.pontos
-            });
-
             this.atualizarPontuacao();
         }
 
@@ -528,6 +531,88 @@
             }));
 
             console.groupEnd();
+        }
+
+        getQuestionLabel(input) {
+            // Try to find the question label
+            const fieldContainer = input.closest('.wpforms-field');
+            if (fieldContainer) {
+                const label = fieldContainer.querySelector('.wpforms-field-label');
+                if (label) {
+                    return label.textContent.trim();
+                }
+            }
+            return `Questão ${this.getFieldId(input)}`;
+        }
+
+        atualizarRespostasIncorretas() {
+            const container = document.querySelector('.quiz-incorrect-answers');
+            if (!container) return;
+
+            // Clear current content
+            container.innerHTML = '';
+
+            if (this.respostasIncorretas.size === 0) {
+                container.innerHTML = '<p>Todas as respostas estão completamente corretas!</p>';
+                return;
+            }
+
+            // Create list of incorrect/partially correct answers
+            const list = document.createElement('ul');
+            list.className = 'quiz-incorrect-list';
+
+            this.respostasIncorretas.forEach((info, fieldId) => {
+                const item = document.createElement('li');
+                item.className = 'quiz-incorrect-item';
+                
+                let status = 'incorreta';
+                if (info.respostaUsuario === info.respostaSecundaria) {
+                    status = 'parcialmente correta';
+                }
+
+                item.innerHTML = `
+                    <div class="quiz-question">
+                        <strong>${info.pergunta}</strong>
+                    </div>
+                    <div class="quiz-answer-info">
+                        <span class="quiz-user-answer">Sua resposta: ${info.respostaUsuario}</span>
+                        <span class="quiz-status">(${status})</span>
+                    </div>
+                `;
+
+                list.appendChild(item);
+            });
+
+            container.appendChild(list);
+
+            // Add some basic styles
+            const style = document.createElement('style');
+            style.textContent = `
+                .quiz-incorrect-list {
+                    list-style: none;
+                    padding: 0;
+                    margin: 15px 0;
+                }
+                .quiz-incorrect-item {
+                    padding: 10px;
+                    margin-bottom: 10px;
+                    border: 1px solid #ddd;
+                    border-radius: 4px;
+                    background: #f9f9f9;
+                }
+                .quiz-question {
+                    margin-bottom: 5px;
+                }
+                .quiz-answer-info {
+                    font-size: 0.9em;
+                    color: #666;
+                }
+                .quiz-status {
+                    margin-left: 10px;
+                    font-style: italic;
+                }
+            `;
+            document.head.appendChild(style);
         }
     }
 

@@ -60,6 +60,9 @@ class WPForms_Quiz_Score {
         
         // Adiciona tipos de respostas
         add_filter('wpforms_answer_types', array($this, 'add_answer_types')); 
+        
+        // Add smart tag
+        add_filter('wpforms_smart_tags', array($this, 'add_smart_tags'));
     }
 
     public function init() {
@@ -545,9 +548,20 @@ class WPForms_Quiz_Score {
 
     // Adiciona o filtro para substituir a variável {quiz_score}
     public function process_smart_tags($content, $form_data, $fields = array(), $entry_id = 0) {
+        // Original quiz score tag processing
         if (strpos($content, '{quiz_score}') !== false) {
             $content = str_replace('{quiz_score}', '<span class="quiz-score-display">0</span>', $content);
         }
+
+        // Process new incorrect answers tag
+        if (strpos($content, '{quiz_incorrect_answers}') !== false) {
+            $content = str_replace(
+                '{quiz_incorrect_answers}', 
+                '<div class="quiz-incorrect-answers"></div>', 
+                $content
+            );
+        }
+
         return $content;
     }
 
@@ -750,6 +764,12 @@ class WPForms_Quiz_Score {
             'message' => 'Campo salvo com sucesso',
             'field_id' => $field_id
         ));
+    }
+
+    public function add_smart_tags($tags) {
+        // Add our new smart tag
+        $tags['quiz_incorrect_answers'] = 'Quiz - Respostas Parcialmente Corretas';
+        return $tags;
     }
 }
 

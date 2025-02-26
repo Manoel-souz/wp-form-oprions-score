@@ -620,12 +620,88 @@
                 container.innerHTML = `<pre>${conteudoRespostas}</pre>`;
             }
 
+<<<<<<< HEAD
             // Atualiza o campo textarea se existir
             if (textareaField) {
                 textareaField.value = conteudoRespostas;
                 // Dispara evento de mudança para garantir que o formulário detecte a alteração
                 textareaField.dispatchEvent(new Event('change', { bubbles: true }));
             }
+=======
+            this.respostasIncorretas.forEach((info, fieldId) => {
+                const item = document.createElement('li');
+                item.className = 'quiz-incorrect-item';
+                
+                let status = 'incorreta';
+                if (info.respostaUsuario === info.respostaSecundaria) {
+                    status = 'parcialmente correta';
+                }
+
+                item.innerHTML = `
+                    <div class="quiz-question">
+                        <strong>${info.pergunta}</strong>
+                    </div>
+                    <div class="quiz-answer-info">
+                        <span class="quiz-user-answer">Sua resposta: ${info.respostaUsuario}</span>
+                        <span class="quiz-status">(${status})</span>
+                    </div>
+                `;
+
+                list.appendChild(item);
+            });
+
+            container.appendChild(list);
+
+            // Add some basic styles
+            const style = document.createElement('style');
+            style.textContent = `
+                .quiz-incorrect-answers {
+                    margin: 20px 0;
+                    padding: 15px;
+                    background: #f9f9f9;
+                    border: 1px solid #ddd;
+                    border-radius: 4px;
+                }
+                .quiz-incorrect-list {
+                    list-style: none;
+                    padding: 0;
+                    margin: 0;
+                }
+                .quiz-incorrect-item {
+                    padding: 10px;
+                    margin-bottom: 10px;
+                    border-left: 3px solid #ff6b6b;
+                    background: #fff;
+                }
+                .quiz-incorrect-item.partially-correct {
+                    border-left-color: #ffd93d;
+                }
+                .quiz-question {
+                    font-weight: bold;
+                    margin-bottom: 5px;
+                }
+                .quiz-answer-info {
+                    color: #666;
+                    font-size: 0.9em;
+                }
+                .quiz-status {
+                    display: inline-block;
+                    margin-left: 10px;
+                    padding: 2px 6px;
+                    border-radius: 3px;
+                    font-size: 0.8em;
+                }
+                .quiz-status.incorrect {
+                    background: #ffe3e3;
+                    color: #ff6b6b;
+                }
+                .quiz-status.partially-correct {
+                    background: #fff3cd;
+                    color: #856404;
+                }
+            `;
+            document.head.appendChild(style);
+>>>>>>> d8f85980d1188a7b443c0dfd697cf888bad3d028
         }
     }
 

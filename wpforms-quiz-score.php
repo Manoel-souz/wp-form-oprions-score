@@ -312,18 +312,23 @@ class WPForms_Quiz_Score {
     }
 
     public function save_quiz_settings() {
+        error_log('🎯 Iniciando save_quiz_settings');
+        
         // Verifica o nonce
         if (!check_ajax_referer('wpforms-quiz', 'nonce', false)) {
-            wp_send_json_error(array(
-                'message' => 'Nonce inválido. Por favor, recarregue a página e tente novamente.'
-            ));
+            error_log('❌ Nonce inválido');
+            wp_send_json_error(array('message' => 'Nonce inválido. Por favor, recarregue a página e tente novamente.'));
             return;
         }
 
         $form_id = isset($_POST['form_id']) ? absint($_POST['form_id']) : 0;
         $settings = isset($_POST['settings']) ? $_POST['settings'] : array();
 
+        error_log('📝 Dados recebidos - Form ID: ' . $form_id);
+        error_log('📝 Settings: ' . print_r($settings, true));
+
         if (!$form_id || empty($settings)) {
+            error_log('❌ Dados inválidos');
             wp_send_json_error(array('message' => 'Dados inválidos'));
             return;
         }
@@ -332,27 +337,96 @@ class WPForms_Quiz_Score {
         $table_name = $wpdb->prefix . 'wpforms_quiz_answers';
         $success = true;
 
-        foreach ($settings as $field_id => $data) {
-            $result = $wpdb->replace(
-                $table_name,
-                array(
-                    'form_id' => $form_id,
+        try {
+            // Inicia transação
+            $wpdb->query('START TRANSACTION');
+
+            // Processa cada configuração
+            foreach ($settings as $key => $data) {
+                if (!isset($data['form_id']) || !isset($data['field_id']) || !isset($data['type'])) {
+                    error_log('❌ Dados incompletos para: ' . $key);
+                    continue;
+                }
+
+                $field_data = array(
+                    'form_id' => absint($data['form_id']),
                     'field_id' => absint($data['field_id']),
-                    'correct_answer' => sanitize_text_field($data['primary_answer']),
-                    'second_answer' => sanitize_text_field($data['secondary_answer']),
-                    'answer_type' => 'quiz'
-                ),
-                array('%d', '%d', '%s', '%s', '%s')
-            );
+                    'answer_type' => sanitize_text_field($data['type'])
+                );
 
-            if ($result === false) {
-                $success = false;
+                // Adiciona campos específicos baseado no tipo
+                if ($data['type'] === 'quiz_answer') {
+                    $field_data['correct_answer'] = isset($data['primary_answer']) ? 
+                        sanitize_text_field($data['primary_answer']) : '';
+                    $field_data['second_answer'] = isset($data['secondary_answer']) ? 
+                        sanitize_text_field($data['secondary_answer']) : '';
+                } else {
+                    $field_data['correct_answer'] = '';
+                    $field_data['second_answer'] = '';
+                }
+
+                error_log('📝 Atualizando/Inserindo dados: ' . print_r($field_data, true));
+
+                // Verifica se o registro já existe
+                $exists = $wpdb->get_var($wpdb->prepare(
+                    "SELECT id FROM $table_name WHERE form_id = %d AND field_id = %d",
+                    $field_data['form_id'],
+                    $field_data['field_id']
+                ));
+
+                if ($exists) {
+                    // Atualiza o registro existente
+                    $result = $wpdb->update(
+                        $table_name,
+                        $field_data,
+                        array(
+                            'form_id' => $field_data['form_id'],
+                            'field_id' => $field_data['field_id']
+                        ),
+                        array(
+                            '%d', // form_id
+                            '%d', // field_id
+                            '%s', // answer_type
+                            '%s', // correct_answer
+                            '%s'  // second_answer
+                        ),
+                        array('%d', '%d')
+                    );
+                } else {
+                    // Insere novo registro
+                    $result = $wpdb->insert(
+                        $table_name,
+                        $field_data,
+                        array(
+                            '%d', // form_id
+                            '%d', // field_id
+                            '%s', // answer_type
+                            '%s', // correct_answer
+                            '%s'  // second_answer
+                        )
+                    );
+                }
+
+                if ($result === false) {
+                    error_log('❌ Erro ao salvar: ' . $wpdb->last_error);
+                    $success = false;
+                    break;
+                }
             }
-        }
 
-        if ($success) {
-            wp_send_json_success(array('message' => 'Configurações salvas com sucesso'));
-        } else {
+            if ($success) {
+                $wpdb->query('COMMIT');
+                error_log('✅ Configurações salvas com sucesso');
+                wp_send_json_success(array('message' => 'Configurações salvas com sucesso'));
+            } else {
+                $wpdb->query('ROLLBACK');
+                error_log('❌ Erro ao salvar configurações');
+                wp_send_json_error(array('message' => 'Erro ao salvar configurações'));
+            }
+
+        } catch (Exception $e) {
+            $wpdb->query('ROLLBACK');
+            error_log('❌ Exceção ao salvar configurações: ' . $e->getMessage());
             wp_send_json_error(array('message' => 'Erro ao salvar configurações'));
         }
     }
@@ -589,11 +663,31 @@ class WPForms_Quiz_Score {
             echo '</div>';
             return;
         }
+
+        // Busca as configurações salvas no banco de dados
+        $saved_settings = $wpdb->get_results($wpdb->prepare(
+            "SELECT field_id, answer_type 
+            FROM {$wpdb->prefix}wpforms_quiz_answers 
+            WHERE form_id = %d AND (answer_type = 'score_field' OR answer_type = 'incorrect_answers_field')",
+            $form_id
+        ), OBJECT_K);
+
+        // Extrai os IDs dos campos salvos
+        $current_score_field = '';
+        $current_incorrect_answers_field = '';
+        foreach ($saved_settings as $field_id => $setting) {
+            if ($setting->answer_type === 'score_field') {
+                $current_score_field = $field_id;
+            } elseif ($setting->answer_type === 'incorrect_answers_field') {
+                $current_incorrect_answers_field = $field_id;
+            }
+        }
         
         $form_data = json_decode($form->post_content, true);
         $number_fields = array();
+        $textarea_fields = array(); // Array para campos textarea
         
-        // Filtra apenas campos do tipo number
+        // Filtra campos number e textarea
         if (!empty($form_data['fields'])) {
             foreach ($form_data['fields'] as $field) {
                 if ($field['type'] === 'number') {
@@ -602,12 +696,15 @@ class WPForms_Quiz_Score {
                         'id' => $field['id']
                     );
                 }
+                // Adiciona campos textarea
+                if ($field['type'] === 'textarea') {
+                    $textarea_fields[$field['id']] = array(
+                        'label' => $field['label'],
+                        'id' => $field['id']
+                    );
+                }
             }
         }
-        
-        // Busca a configuração atual
-        $current_score_field = isset($form_data['settings']['quiz_score_field']) ? 
-                              $form_data['settings']['quiz_score_field'] : '';
         
         // Campo para selecionar onde mostrar a pontuação
         echo '<div class="wpforms-setting-row">';
@@ -634,18 +731,56 @@ class WPForms_Quiz_Score {
             echo '</select>';
             
             echo '<span class="spinner" style="float: none; margin: 0 5px;"></span>';
-            echo '</div>';
             
-            echo '<div style="margin-top: 10px;">';
-            echo '<label style="display: flex; align-items: center; gap: 5px;">';
-            echo '<input type="checkbox" name="hide_score_field" id="hide_score_field">';
-            echo '<span>Ocultar este campo após preenchimento</span>';
-            echo '</label>';
-            echo '</div>';
+            // Exibe o valor atual se existir
+            if ($current_score_field) {
+                echo '<div class="current-value" style="margin-left: 10px; padding: 5px; background: #f0f0f1; border-radius: 4px;">';
+                echo '<strong>Campo atual:</strong> ID ' . esc_html($current_score_field);
+                echo '</div>';
+            }
             
-            echo '<p class="description">Selecione o campo numérico onde a pontuação será exibida automaticamente.</p>';
+            echo '</div>';
         }
+        echo '</div>';
+        echo '</div>';
+
+        // Campo para selecionar onde mostrar as respostas incorretas
+        echo '<div class="wpforms-setting-row">';
+        echo '<label class="wpforms-setting-label">Campo para Exibir Respostas Incorretas</label>';
+        echo '<div class="wpforms-setting-field">';
         
+        if (empty($textarea_fields)) {
+            echo '<p class="description" style="color: #cc0000;">Nenhum campo de texto longo encontrado. Adicione um campo do tipo "Texto Longo" ao formulário.</p>';
+        } else {
+            echo '<div class="incorrect-answers-field-selection" style="display: flex; align-items: center; gap: 10px;">';
+            echo '<select name="quiz_incorrect_answers_field" id="quiz_incorrect_answers_field" data-form-id="' . esc_attr($form_id) . '">';
+            echo '<option value="">Selecione um campo</option>';
+            
+            foreach ($textarea_fields as $field) {
+                $selected = ($current_incorrect_answers_field == $field['id']) ? 'selected' : '';
+                echo sprintf(
+                    '<option value="%d" %s>%s (ID: %d)</option>',
+                    $field['id'],
+                    $selected,
+                    esc_html($field['label']),
+                    $field['id']
+                );
+            }
+            echo '</select>';
+            
+            echo '<span class="spinner" style="float: none; margin: 0 5px;"></span>';
+            
+            // Exibe o valor atual se existir
+            if ($current_incorrect_answers_field) {
+                echo '<div class="current-value" style="margin-left: 10px; padding: 5px; background: #f0f0f1; border-radius: 4px;">';
+                echo '<strong>Campo atual:</strong> ID ' . esc_html($current_incorrect_answers_field);
+                echo '</div>';
+            }
+            
+            echo '</div>';
+            
+            echo '<p class="description">Selecione o campo de texto longo onde as respostas incorretas serão exibidas automaticamente.</p>';
+        }
         echo '</div>';
         echo '</div>';
         

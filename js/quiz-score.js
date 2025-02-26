@@ -11,6 +11,7 @@
             this.valorQuestao = 0;
             this.respostasAnteriores = {};
             this.respostasIncorretas = new Map(); // Store incorrect/partially correct answers
+            this.respostasUsuario = new Map(); // Armazena todas as respostas do usuário
 
             // Busca as respostas do banco via AJAX
             this.carregarRespostasCorretas();
@@ -19,6 +20,10 @@
             this.initEventos();
             this.initSaveScoreField();
             this.initScoreFieldSave();
+            this.initFormSubmission();
+
+            // Atualiza o display inicial
+            this.atualizarDisplayEmTempoReal();
             console.groupEnd();
         }
 
@@ -99,6 +104,10 @@
                                         window.scoreFieldId = wpformsQuizData.scoreFieldId;
                                         console.log('🔍 scoreFieldId:', window.scoreFieldId);
                                         console.log('📊 Campo de pontuação definido:', key);
+                                    } else if (value.type === 'incorrect_answers_field') {
+                                        wpformsQuizData.incorrectAnswersFieldId = key;
+                                        window.incorrectAnswersFieldId = wpformsQuizData.incorrectAnswersFieldId;
+                                        console.log('📝 Campo de respostas incorretas definido:', key);
                                     } else {
                                         this.respostasCorretas[key] = {
                                             primary_answer: value.primary_answer || '',
@@ -410,18 +419,43 @@
             console.group('🔍 Inicializando salvamento do campo');
             
             const saveButton = $('#save-quiz-settings');
-            const select = $('.quiz-answer-select');
+            const scoreSelect = $('#quiz_score_field');
+            const incorrectAnswersSelect = $('#quiz_incorrect_answers_field');
 
-            if (saveButton.length && select.length) {
+            if (saveButton.length && (scoreSelect.length || incorrectAnswersSelect.length)) {
                 saveButton.on('click', (e) => {
                     e.preventDefault();
                     console.log('🔔 Botão clicado');
 
                     // Obtém os dados do formulário
-                    const formId = select.first().data('form-id');
+                    const formId = scoreSelect.data('form-id') || incorrectAnswersSelect.data('form-id');
                     const settings = {};
 
-                    // Group selects by field_id
+                    // Salva campo de pontuação
+                    const scoreFieldId = scoreSelect.val();
+                    if (scoreFieldId) {
+                        settings.score_field = {
+                            form_id: formId,
+                            field_id: scoreFieldId,
+                            type: 'score_field',
+                            correct_answer: '',
+                            second_answer: ''
+                        };
+                    }
+
+                    // Salva campo de respostas incorretas
+                    const incorrectAnswersFieldId = incorrectAnswersSelect.val();
+                    if (incorrectAnswersFieldId) {
+                        settings.incorrect_answers_field = {
+                            form_id: formId,
+                            field_id: incorrectAnswersFieldId,
+                            type: 'incorrect_answers_field',
+                            correct_answer: '',
+                            second_answer: ''
+                        };
+                    }
+
+                    // Group selects by field_id para respostas do quiz
                     $('.quiz-question-settings').each(function() {
                         const $container = $(this);
                         const fieldId = $container.find('.primary-answer').data('field-id');
@@ -429,9 +463,10 @@
                         const secondaryAnswer = $container.find('.secondary-answer').val();
 
                         if (primaryAnswer || secondaryAnswer) {
-                            settings[fieldId] = {
+                            settings['quiz_answer_' + fieldId] = {
                                 form_id: formId,
                                 field_id: fieldId,
+                                type: 'quiz_answer',
                                 primary_answer: primaryAnswer || '',
                                 secondary_answer: secondaryAnswer || ''
                             };
@@ -439,9 +474,11 @@
                     });
 
                     if (Object.keys(settings).length === 0) {
-                        alert('Selecione pelo menos uma resposta');
+                        alert('Selecione pelo menos uma resposta ou campo de exibição');
                         return;
                     }
+
+                    console.log('💾 Dados a serem enviados:', settings);
 
                     // Mostra loading
                     const $spinner = saveButton.next('.spinner');
@@ -462,6 +499,13 @@
                             console.log('✅ Resposta:', response);
                             if (response.success) {
                                 alert('Configurações salvas com sucesso!');
+                                // Atualiza os IDs globais após salvar com sucesso
+                                if (settings.score_field) {
+                                    wpformsQuizData.scoreFieldId = settings.score_field.field_id;
+                                }
+                                if (settings.incorrect_answers_field) {
+                                    wpformsQuizData.incorrectAnswersFieldId = settings.incorrect_answers_field.field_id;
+                                }
                             } else {
                                 alert('Erro ao salvar: ' + (response.data?.message || 'Erro desconhecido'));
                             }
@@ -477,6 +521,8 @@
                     });
                 });
             }
+            
+            console.groupEnd();
         }
 
         showNotification(message, type = 'success') {
@@ -546,73 +592,40 @@
         }
 
         atualizarRespostasIncorretas() {
+            // Busca tanto o container quanto o campo textarea
             const container = document.querySelector('.quiz-incorrect-answers');
-            if (!container) return;
-
-            // Clear current content
-            container.innerHTML = '';
+            const textareaField = document.querySelector(`#wpforms-${formId}-field_${wpformsQuizData.incorrectAnswersFieldId}`);
+            
+            let conteudoRespostas = '';
 
             if (this.respostasIncorretas.size === 0) {
-                container.innerHTML = '<p>Todas as respostas estão completamente corretas!</p>';
-                return;
+                conteudoRespostas = 'Todas as respostas estão completamente corretas!';
+            } else {
+                // Cria lista de respostas incorretas/parcialmente corretas
+                const respostasFormatadas = [];
+                
+                this.respostasIncorretas.forEach((info, fieldId) => {
+                    respostasFormatadas.push(
+                        `Questão: ${info.pergunta}\n` +
+                        `Sua resposta: ${info.respostaUsuario}\n` +
+                        `Resposta correta: ${info.respostaCorreta}\n`
+                    );
+                });
+                
+                conteudoRespostas = respostasFormatadas.join('\n');
             }
 
-            // Create list of incorrect/partially correct answers
-            const list = document.createElement('ul');
-            list.className = 'quiz-incorrect-list';
+            // Atualiza o container se existir
+            if (container) {
+                container.innerHTML = `<pre>${conteudoRespostas}</pre>`;
+            }
 
-            this.respostasIncorretas.forEach((info, fieldId) => {
-                const item = document.createElement('li');
-                item.className = 'quiz-incorrect-item';
-                
-                let status = 'incorreta';
-                if (info.respostaUsuario === info.respostaSecundaria) {
-                    status = 'parcialmente correta';
-                }
-
-                item.innerHTML = `
-                    <div class="quiz-question">
-                        <strong>${info.pergunta}</strong>
-                    </div>
-                    <div class="quiz-answer-info">
-                        <span class="quiz-user-answer">Sua resposta: ${info.respostaUsuario}</span>
-                        <span class="quiz-status">(${status})</span>
-                    </div>
-                `;
-
-                list.appendChild(item);
-            });
-
-            container.appendChild(list);
-
-            // Add some basic styles
-            const style = document.createElement('style');
-            style.textContent = `
-                .quiz-incorrect-list {
-                    list-style: none;
-                    padding: 0;
-                    margin: 15px 0;
-                }
-                .quiz-incorrect-item {
-                    padding: 10px;
-                    margin-bottom: 10px;
-                    border: 1px solid #ddd;
-                    border-radius: 4px;
-                    background: #f9f9f9;
-                }
-                .quiz-question {
-                    margin-bottom: 5px;
-                }
-                .quiz-answer-info {
-                    font-size: 0.9em;
-                    color: #666;
-                }
-                .quiz-status {
-                    margin-left: 10px;
-                    font-style: italic;
-                }
-            `;
-            document.head.appendChild(style);
+            // Atualiza o campo textarea se existir
+            if (textareaField) {
+                textareaField.value = conteudoRespostas;
+                // Dispara evento de mudança para garantir que o formulário detecte a alteração
+                textareaField.dispatchEvent(new Event('change', { bubbles: true }));
+            }
         }
     }
 

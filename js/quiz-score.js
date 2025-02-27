@@ -2,7 +2,6 @@
 (function ($) {
     class WPFormsQuizScore {
         constructor() {
-            console.group('🎯 WPForms Quiz Score - Inicialização');
 
             // Inicializa variáveis
             this.pontos = 0;
@@ -20,35 +19,23 @@
             this.initEventos();
             this.initSaveScoreField();
             this.initScoreFieldSave();
-            this.initFormSubmission();
-
-            // Atualiza o display inicial
-            this.atualizarDisplayEmTempoReal();
-            console.groupEnd();
         }
 
         carregarRespostasCorretas() {
             // Verifica se wpformsQuizData está disponível
             if (typeof wpformsQuizData === 'undefined') {
-                console.error('❌ wpformsQuizData não está definido');
                 return;
             }
 
             // Busca o ID do formulário no DOM
             let formId = null;
-            console.log('🔍 Iniciando busca do formId...');
-
             window.formElement = document.querySelector('form[id^="wpforms-form-"]');
-            console.log('🔍 Form element encontrado:', formElement);
 
             if (formElement) {
-                console.log('🔍 ID do form element:', formElement.id);
                 window.matches = formElement.id.match(/wpforms-form-(\d+)/);
-                console.log('🔍 Matches do regex:', matches);
 
                 if (matches) {
                     formId = matches[1];
-                    console.log('✅ Form ID encontrado no DOM:', formId);
                 } else {
                     console.warn('⚠️ Regex não encontrou matches no ID do form');
                 }
@@ -57,11 +44,9 @@
             }
 
             // Fallback para wpformsQuizData
-            console.log('🔍 Verificando wpformsQuizData:', wpformsQuizData);
 
             if (!formId && wpformsQuizData.formId) {
                 formId = wpformsQuizData.formId;
-                console.log('✅ Form ID obtido do wpformsQuizData:', formId);
             } else if (!formId) {
                 console.error('❌ Nenhum form ID encontrado em nenhuma fonte');
             }
@@ -71,14 +56,9 @@
                 return;
             }
 
-            console.log('📝 Preparando para carregar respostas do form:', formId);
 
             // Função para fazer a requisição AJAX
             const fazerRequisicao = () => {
-                console.group('🔄 Iniciando requisição AJAX');
-                console.log('URL:', wpformsQuizData.ajaxurl);
-                console.log('Form ID:', formId);
-                console.log('Nonce:', wpformsQuizData.nonce);
                 window.formId = formId;
                 window.ajaxurl = wpformsQuizData.ajaxurl;
 
@@ -93,38 +73,26 @@
                             nonce: wpformsQuizData.nonce
                         },
                         success: (response) => {
-                            console.log('✅ Resposta recebida:', response);
                             if (response && response.success) {
                                 this.respostasCorretas = {};
 
                                 Object.entries(response.data).forEach(([key, value]) => {
-                                    console.log('🔍 Processando resposta:', { key, value });
                                     if (value.type === 'score_field') {
                                         wpformsQuizData.scoreFieldId = key;
                                         window.scoreFieldId = wpformsQuizData.scoreFieldId;
-                                        console.log('🔍 scoreFieldId:', window.scoreFieldId);
-                                        console.log('📊 Campo de pontuação definido:', key);
                                     } else if (value.type === 'incorrect_answers_field') {
                                         wpformsQuizData.incorrectAnswersFieldId = key;
                                         window.incorrectAnswersFieldId = wpformsQuizData.incorrectAnswersFieldId;
-                                        console.log('📝 Campo de respostas incorretas definido:', key);
                                     } else {
                                         this.respostasCorretas[key] = {
                                             primary_answer: value.primary_answer || '',
                                             secondary_answer: value.secondary_answer || ''
                                         };
-                                        console.log('✅ Resposta registrada:', {
-                                            campo: key,
-                                            primaria: value.primary_answer,
-                                            secundaria: value.secondary_answer
-                                        });
                                     }
                                 });
 
-                                console.log('✅ Todas respostas processadas:', this.respostasCorretas);
                                 resolve();
                             } else {
-                                console.error('❌ Erro na resposta:', response);
                                 reject();
                             }
                         },
@@ -139,11 +107,9 @@
             // Faz duas requisições com intervalo de 2 segundos
             fazerRequisicao()
                 .then(() => {
-                    console.log('🔄 Primeira requisição concluída');
                     return new Promise(resolve => setTimeout(resolve, 2000));
                 })
                 .then(() => {
-                    console.log('🔄 Iniciando segunda requisição...');
                     return fazerRequisicao();
                 })
                 .catch(error => {
@@ -265,25 +231,13 @@
         }
 
         atualizarPontuacao() {
-            console.group('🎯 Atualizando Pontuação');
 
             // Usa this.pontos ao invés de window.pontos
             const notaDecimal = Math.round(this.pontos * 10) / 10;
             const notaInteira = Math.round(notaDecimal);
             
-            console.log('📊 Dados:', {
-                pontos: this.pontos,
-                notaDecimal: notaDecimal,
-                notaInteira: notaInteira,
-                formId: wpformsQuizData.formId,
-                scoreFieldId: wpformsQuizData.scoreFieldId
-            });
-
             // Tenta encontrar o campo de pontuação
-            // Log do seletor específico para debug
-            console.log('🔍 Buscando campo:', `#wpforms-${formId}-field_${wpformsQuizData.scoreFieldId}`);
-            console.log('🔍 Elemento encontrado:', document.querySelector(`#wpforms-${formId}-field_${wpformsQuizData.scoreFieldId}`));
-
+            
             const possiveisElementos = [
                 document.querySelector(`#wpforms-${formId}-field_${wpformsQuizData.scoreFieldId}`),
                 document.querySelector(`#wpforms-field_${wpformsQuizData.scoreFieldId}`),
@@ -294,7 +248,6 @@
 
             // Usa o primeiro elemento válido encontrado
             const scoreField = possiveisElementos.find(elem => elem !== null);
-            console.log('🔍 Campo de pontuação encontrado bojasjopd:', scoreField);
 
             if (scoreField) {
                 try {
@@ -304,7 +257,6 @@
                     } else {
                         scoreField.textContent = notaDecimal.toFixed(1);
                     }
-                    console.log('✅ Pontuação atualizada:', scoreField);
                 } catch (erro) {
                     console.error('❌ Erro ao atualizar pontuação:', erro);
                 }
@@ -316,8 +268,6 @@
             document.querySelectorAll('.quiz-score-display').forEach(display => {
                 display.textContent = notaDecimal.toFixed(1);
             });
-
-            console.groupEnd();
         }
 
         extrairFieldId(elemento) {
@@ -368,7 +318,6 @@
         saveScoreField(fieldId) {
             if (!formId || !fieldId) {
                 console.error('❌ IDs inválidos');
-                console.groupEnd();
                 return;
             }
 
@@ -377,12 +326,6 @@
             data.append('nonce', wpformsQuizData.nonce); 
             data.append('form_id', formId);
             data.append('field_id', fieldId);
-            console.log('🔍 Dados enviados:', data);
-            console.log('🔍 URL:', wpformsQuizData.ajaxurl);
-            console.log('🔍 ajaxurl:', ajaxurl);
-            console.log('🔍 Form ID:', formId);
-            console.log('🔍 Field ID:', fieldId);
-            console.log('🔍 Nonce:', wpformsQuizData.nonce);
 
             $.ajax({
                 url: wpformsQuizData.ajaxurl,
@@ -398,25 +341,13 @@
                     }
                 },
                 error: (error) => {
-                    console.error('❌ Erro na requisição:', error);
-                    console.log('🔍 Dados enviados:', data);
-                    console.log('🔍 URL:', wpformsQuizData.ajaxurl);
-                    console.log('🔍 ajaxurl:', ajaxurl);
-                    console.log('🔍 Form ID:', formId);
-                    console.log('🔍 Field ID:', fieldId);
-                    console.log('🔍 Nonce:', wpformsQuizData.nonce);
-                    console.log('🔍 wpformsQuizData:', wpformsQuizData);
-                    
-                    console.groupEnd();
                 },
                 complete: () => {
-                    console.groupEnd();
                 }
             });
         }
 
         initScoreFieldSave() {
-            console.group('🔍 Inicializando salvamento do campo');
             
             const saveButton = $('#save-quiz-settings');
             const scoreSelect = $('#quiz_score_field');
@@ -425,7 +356,6 @@
             if (saveButton.length && (scoreSelect.length || incorrectAnswersSelect.length)) {
                 saveButton.on('click', (e) => {
                     e.preventDefault();
-                    console.log('🔔 Botão clicado');
 
                     // Obtém os dados do formulário
                     const formId = scoreSelect.data('form-id') || incorrectAnswersSelect.data('form-id');
@@ -478,7 +408,6 @@
                         return;
                     }
 
-                    console.log('💾 Dados a serem enviados:', settings);
 
                     // Mostra loading
                     const $spinner = saveButton.next('.spinner');
@@ -496,7 +425,6 @@
                             settings: settings
                         },
                         success: function(response) {
-                            console.log('✅ Resposta:', response);
                             if (response.success) {
                                 alert('Configurações salvas com sucesso!');
                                 // Atualiza os IDs globais após salvar com sucesso
@@ -522,7 +450,6 @@
                 });
             }
             
-            console.groupEnd();
         }
 
         showNotification(message, type = 'success') {
@@ -551,32 +478,22 @@
         }
 
         atualizarDisplays(notaDecimal) {
-            console.group('🎯 Atualizando Displays');
             
             // Atualiza displays da pontuação
             const displays = document.querySelectorAll('.quiz-score-display');
-            console.log('🔍 Buscando displays de pontuação');
             
             if (displays.length === 0) {
-                console.warn('⚠️ Nenhum display encontrado');
-                console.groupEnd();
                 return;
             }
 
-            console.log(`✅ ${displays.length} displays encontrados`);
-            
             displays.forEach(display => {
-                const oldValue = display.textContent;
                 display.textContent = notaDecimal.toFixed(1);
-                console.log(`📊 Display atualizado: ${oldValue} -> ${notaDecimal.toFixed(1)}`);
             });
 
             // Dispara evento de atualização
             document.dispatchEvent(new CustomEvent('quizScoreDisplayUpdated', {
                 detail: { score: notaDecimal }
             }));
-
-            console.groupEnd();
         }
 
         getQuestionLabel(input) {
@@ -604,11 +521,10 @@
                 // Cria lista de respostas incorretas/parcialmente corretas
                 const respostasFormatadas = [];
                 
-                this.respostasIncorretas.forEach((info, fieldId) => {
+                this.respostasIncorretas.forEach((info) => {
                     respostasFormatadas.push(
                         `Questão: ${info.pergunta}\n` +
-                        `Sua resposta: ${info.respostaUsuario}\n` +
-                        `Resposta correta: ${info.respostaCorreta}\n`
+                        `Sua resposta: ${info.respostaUsuario}\n`
                     );
                 });
                 
@@ -620,88 +536,12 @@
                 container.innerHTML = `<pre>${conteudoRespostas}</pre>`;
             }
 
-<<<<<<< HEAD
             // Atualiza o campo textarea se existir
             if (textareaField) {
                 textareaField.value = conteudoRespostas;
                 // Dispara evento de mudança para garantir que o formulário detecte a alteração
                 textareaField.dispatchEvent(new Event('change', { bubbles: true }));
             }
-=======
-            this.respostasIncorretas.forEach((info, fieldId) => {
-                const item = document.createElement('li');
-                item.className = 'quiz-incorrect-item';
-                
-                let status = 'incorreta';
-                if (info.respostaUsuario === info.respostaSecundaria) {
-                    status = 'parcialmente correta';
-                }
-
-                item.innerHTML = `
-                    <div class="quiz-question">
-                        <strong>${info.pergunta}</strong>
-                    </div>
-                    <div class="quiz-answer-info">
-                        <span class="quiz-user-answer">Sua resposta: ${info.respostaUsuario}</span>
-                        <span class="quiz-status">(${status})</span>
-                    </div>
-                `;
-
-                list.appendChild(item);
-            });
-
-            container.appendChild(list);
-
-            // Add some basic styles
-            const style = document.createElement('style');
-            style.textContent = `
-                .quiz-incorrect-answers {
-                    margin: 20px 0;
-                    padding: 15px;
-                    background: #f9f9f9;
-                    border: 1px solid #ddd;
-                    border-radius: 4px;
-                }
-                .quiz-incorrect-list {
-                    list-style: none;
-                    padding: 0;
-                    margin: 0;
-                }
-                .quiz-incorrect-item {
-                    padding: 10px;
-                    margin-bottom: 10px;
-                    border-left: 3px solid #ff6b6b;
-                    background: #fff;
-                }
-                .quiz-incorrect-item.partially-correct {
-                    border-left-color: #ffd93d;
-                }
-                .quiz-question {
-                    font-weight: bold;
-                    margin-bottom: 5px;
-                }
-                .quiz-answer-info {
-                    color: #666;
-                    font-size: 0.9em;
-                }
-                .quiz-status {
-                    display: inline-block;
-                    margin-left: 10px;
-                    padding: 2px 6px;
-                    border-radius: 3px;
-                    font-size: 0.8em;
-                }
-                .quiz-status.incorrect {
-                    background: #ffe3e3;
-                    color: #ff6b6b;
-                }
-                .quiz-status.partially-correct {
-                    background: #fff3cd;
-                    color: #856404;
-                }
-            `;
-            document.head.appendChild(style);
->>>>>>> d8f85980d1188a7b443c0dfd697cf888bad3d028
         }
     }
 
@@ -738,8 +578,6 @@
             }
         });
 
-        console.group('💾 Salvando Configurações Quiz');
-        console.log('Settings:', settings);
 
         // Envia para o servidor
         $.ajax({
@@ -752,7 +590,6 @@
                 form_id: wpformsQuizData.formId // Adiciona o form_id explicitamente
             },
             success: function (response) {
-                console.log('Resposta:', response);
                 if (response.success) {
                     alert('Configurações salvas com sucesso!');
                 } else {
@@ -766,7 +603,6 @@
             complete: function () {
                 $button.prop('disabled', false);
                 $spinner.css('visibility', 'hidden');
-                console.groupEnd();
             }
         });
     });

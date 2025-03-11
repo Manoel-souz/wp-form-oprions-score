@@ -37,23 +37,14 @@
 
                 if (matches) {
                     formId = matches[1];
-                } else {
-                    console.warn('⚠️ Regex não encontrou matches no ID do form');
                 }
-            } else {
-                console.warn('⚠️ Form element não encontrado no DOM');
             }
-
-            // Fallback para wpformsQuizData
 
             if (!formId && wpformsQuizData.formId) {
                 formId = wpformsQuizData.formId;
-            } else if (!formId) {
-                console.error('❌ Nenhum form ID encontrado em nenhuma fonte');
             }
 
             if (!formId) {
-                console.error('❌ ID do formulário não encontrado - Abortando carregamento');
                 return;
             }
 
@@ -102,7 +93,6 @@
                             }
                         },
                         error: (error) => {
-                            console.error('❌ Erro na requisição:', error);
                             reject();
                         }
                     });
@@ -118,7 +108,6 @@
                     return fazerRequisicao();
                 })
                 .catch(error => {
-                    console.error('❌ Erro nas requisições:', error);
                 });
         }
 
@@ -150,7 +139,6 @@
             this.timeoutPontuacao = setTimeout(() => {
                 // Atualiza o total de perguntas respondidas
                 this.totalPerguntas = this.respostasUsuario.size;
-                console.log('Total de perguntas respondidas:', this.totalPerguntas);
                 
                 // Calculate value per question (baseado apenas nas perguntas respondidas)
                 this.valorQuestao = 10 / this.totalPerguntas;
@@ -165,7 +153,6 @@
                 const respostas = this.respostasCorretas[fieldId];
                 
                 if (!respostas) {
-                    console.warn('⚠️ Nenhuma resposta encontrada para o campo:', fieldId);
                     return;
                 }
 
@@ -225,7 +212,6 @@
             
             // Arredonda para uma casa decimal
             this.pontos = Math.round(this.pontos * 10) / 10;
-            console.log('Pontuação recalculada:', this.pontos);
         }
 
         getFieldId(element) {
@@ -287,18 +273,13 @@
                         scoreField.textContent = notaDecimal.toFixed(1);
                     }
                 } catch (erro) {
-                    console.error('❌ Erro ao atualizar pontuação:', erro);
                 }
-            } else {
-                console.warn('⚠️ Campo de pontuação não encontrado');
             }
 
             // Atualiza displays adicionais
             document.querySelectorAll('.quiz-score-display').forEach(display => {
                 display.textContent = notaDecimal.toFixed(1);
             });
-            
-            console.log('Pontuação atualizada:', notaDecimal.toFixed(1));
         }
 
         extrairFieldId(elemento) {
@@ -348,7 +329,6 @@
 
         saveScoreField(fieldId) {
             if (!formId || !fieldId) {
-                console.error('❌ IDs inválidos');
                 return;
             }
 
@@ -366,9 +346,6 @@
                 contentType: false,
                 success: (response) => {
                     if (response.success) {
-                        console.log('✅ Resposta do servidor:', response);
-                    } else {
-                        console.error('❌ Erro do servidor:', response);
                     }
                 },
                 error: (error) => {
@@ -470,7 +447,6 @@
                             }
                         },
                         error: function(xhr, status, error) {
-                            console.error('❌ Erro:', {xhr, status, error});
                             alert('Erro ao salvar configurações');
                         },
                         complete: () => {
@@ -630,7 +606,6 @@
                 }
             },
             error: function (error) {
-                console.error('Erro Ajax:', error);
                 alert('Erro ao salvar configurações');
             },
             complete: function () {

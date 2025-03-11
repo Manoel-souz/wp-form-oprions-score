@@ -21,10 +21,6 @@ class WPForms_Quiz_Score {
     public function __construct() {
         global $wpdb;
         $this->table_name = $wpdb->prefix . 'wpforms_quiz_answers';
-        error_log('🎯 primeiro construtor');
-
-        
-        error_log("📝 Quiz Score: Tabela configurada como: " . $this->table_name);
         
         // Move o registro do hook para fora do construtor
         register_activation_hook(__FILE__, array($this, 'create_answers_table'));
@@ -66,12 +62,10 @@ class WPForms_Quiz_Score {
     }
 
     public function init() {
-        error_log('🎯 segundo init');
         // Inicializa o plugin quando WPForms estiver carregado
     }
 
     public function enqueue_scripts() {
-        error_log('🎯 terceiro enqueue_scripts');
         // Enfileira o jQuery primeiro
         wp_enqueue_script('jquery');
         
@@ -97,12 +91,10 @@ class WPForms_Quiz_Score {
             $html = file_get_contents('php://input');
             if (preg_match('/wpforms-form-(\d+)/', $html, $matches)) {
                 $form_id = absint($matches[1]);
-                error_log('🔍 Form ID encontrado no HTML: ' . $form_id);
             }
             
             // Se não encontrou no DOM, tenta outras formas
             if (!$form_id) {
-                error_log('🔍 Nenhum Form ID encontrado no HTML');
                 $forms = get_posts(array(
                     'post_type' => 'wpforms',
                     'posts_per_page' => -1
@@ -116,8 +108,6 @@ class WPForms_Quiz_Score {
                 }
             }
         }
-
-        error_log('🔍 Form ID detectado: ' . $form_id);
 
         wp_localize_script(
             'wpforms-quiz-score',
@@ -140,7 +130,6 @@ class WPForms_Quiz_Score {
     }
 
     public function add_settings_section($sections, $form_data) {
-        error_log('🎯 quarto add_settings_section');
         $sections['quiz_score'] = 'Opções de Pontuação';
         return $sections;
     }
@@ -274,11 +263,7 @@ class WPForms_Quiz_Score {
 
     public function create_answers_table() {
         global $wpdb;
-        error_log('🎯 sexto create_answers_table');
-        
         try {
-            error_log('📝 Quiz Score: Iniciando criação da tabela');
-            
             $charset_collate = $wpdb->get_charset_collate();
             $table_name = $wpdb->prefix . 'wpforms_quiz_answers';
             
@@ -307,16 +292,12 @@ class WPForms_Quiz_Score {
             }
             
         } catch (Exception $e) {
-            error_log("❌ Quiz Score: Exceção ao criar tabela - " . $e->getMessage());
         }
     }
 
     public function save_quiz_settings() {
-        error_log('🎯 Iniciando save_quiz_settings');
-        
         // Verifica o nonce
         if (!check_ajax_referer('wpforms-quiz', 'nonce', false)) {
-            error_log('❌ Nonce inválido');
             wp_send_json_error(array('message' => 'Nonce inválido. Por favor, recarregue a página e tente novamente.'));
             return;
         }
@@ -324,11 +305,7 @@ class WPForms_Quiz_Score {
         $form_id = isset($_POST['form_id']) ? absint($_POST['form_id']) : 0;
         $settings = isset($_POST['settings']) ? $_POST['settings'] : array();
 
-        error_log('📝 Dados recebidos - Form ID: ' . $form_id);
-        error_log('📝 Settings: ' . print_r($settings, true));
-
         if (!$form_id || empty($settings)) {
-            error_log('❌ Dados inválidos');
             wp_send_json_error(array('message' => 'Dados inválidos'));
             return;
         }
@@ -344,7 +321,6 @@ class WPForms_Quiz_Score {
             // Processa cada configuração
             foreach ($settings as $key => $data) {
                 if (!isset($data['form_id']) || !isset($data['field_id']) || !isset($data['type'])) {
-                    error_log('❌ Dados incompletos para: ' . $key);
                     continue;
                 }
 
@@ -364,8 +340,6 @@ class WPForms_Quiz_Score {
                     $field_data['correct_answer'] = '';
                     $field_data['second_answer'] = '';
                 }
-
-                error_log('📝 Atualizando/Inserindo dados: ' . print_r($field_data, true));
 
                 // Verifica se o registro já existe
                 $exists = $wpdb->get_var($wpdb->prepare(
@@ -408,7 +382,6 @@ class WPForms_Quiz_Score {
                 }
 
                 if ($result === false) {
-                    error_log('❌ Erro ao salvar: ' . $wpdb->last_error);
                     $success = false;
                     break;
                 }
@@ -416,23 +389,19 @@ class WPForms_Quiz_Score {
 
             if ($success) {
                 $wpdb->query('COMMIT');
-                error_log('✅ Configurações salvas com sucesso');
                 wp_send_json_success(array('message' => 'Configurações salvas com sucesso'));
             } else {
                 $wpdb->query('ROLLBACK');
-                error_log('❌ Erro ao salvar configurações');
                 wp_send_json_error(array('message' => 'Erro ao salvar configurações'));
             }
 
         } catch (Exception $e) {
             $wpdb->query('ROLLBACK');
-            error_log('❌ Exceção ao salvar configurações: ' . $e->getMessage());
             wp_send_json_error(array('message' => 'Erro ao salvar configurações'));
         }
     }
 
     private function add_settings_script() {
-        error_log('🎯 décimo add_settings_script');
         ?>
         <script type="text/javascript">
         jQuery(document).ready(function($) {
@@ -513,17 +482,13 @@ class WPForms_Quiz_Score {
     }
 
     public function get_form_data() {
-        error_log('🎯 décimo primeiro get_form_data');
         global $wpdb;
         
         $current_form_id = isset($_GET['form_id']) ? absint($_GET['form_id']) : 0;
         
         if (!$current_form_id) {
-            error_log('Form ID não encontrado');
             return array();
         }
-        
-        error_log('Buscando respostas para o formulário: ' . $current_form_id);
         
         $answers = $wpdb->get_results($wpdb->prepare(
             "SELECT field_id, correct_answer 
@@ -536,19 +501,14 @@ class WPForms_Quiz_Score {
         
         foreach ($answers as $answer) {
             $form_data[$answer->field_id] = $answer->correct_answer;
-            error_log("Resposta carregada - Field ID: {$answer->field_id}, Valor: {$answer->correct_answer}");
         }
         
-        error_log('Dados do formulário recuperados: ' . print_r($form_data, true));
         return $form_data;
     }
 
     public function get_quiz_answers() {
-        error_log('🎯 Iniciando busca de respostas');
-        
         // Verifica o nonce
         if (!check_ajax_referer('wpforms-quiz', 'nonce', false)) {
-            error_log('❌ Nonce inválido');
             wp_send_json_error(array('message' => 'Erro de segurança'));
             return;
         }
@@ -556,11 +516,8 @@ class WPForms_Quiz_Score {
         global $wpdb;
         
         $form_id = isset($_POST['form_id']) ? absint($_POST['form_id']) : 0;
-        
-        error_log('🔍 Buscando respostas para o form_id: ' . $form_id);
-        
+
         if (!$form_id) {
-            error_log('❌ Form ID inválido');
             wp_send_json_error(array('message' => 'Form ID inválido'));
             return;
         }
@@ -574,7 +531,6 @@ class WPForms_Quiz_Score {
         ));
 
         if ($respostas === false) {
-            error_log('❌ Erro no banco de dados: ' . $wpdb->last_error);
             wp_send_json_error(array('message' => 'Erro ao buscar respostas'));
             return;
         }
@@ -589,14 +545,11 @@ class WPForms_Quiz_Score {
             );
         }
 
-        error_log('✅ Respostas encontradas: ' . print_r($respostas_formatadas, true));
-        
         wp_send_json_success($respostas_formatadas);
     }
 
     // Adiciona a opção de cálculo no builder
     public function add_calculate_field_settings($options) {
-        error_log('🎯 décimo terceiro add_calculate_field_settings');
         $options['calculate'] = array(
             'id'      => 'calculate',
             'name'    => 'calculate',
@@ -640,7 +593,6 @@ class WPForms_Quiz_Score {
     }
 
     public function add_score_settings($instance) {
-        error_log('🎯 décimo quarto add_score_settings');
         global $wpdb;
         
         echo '<div class="wpforms-panel-content-section wpforms-panel-content-section-quiz_score">';
@@ -807,7 +759,6 @@ class WPForms_Quiz_Score {
     }
 
     public function score_shortcode($atts) {
-        error_log('🎯 décimo quinto score_shortcode');
         $atts = shortcode_atts(array(
             'form_id' => 0
         ), $atts);
@@ -824,11 +775,9 @@ class WPForms_Quiz_Score {
     }
 
     public function save_quiz_score_field() {
-        error_log('🎯 Iniciando save_quiz_score_field');
-        
+
         // Verifica o nonce
         if (!check_ajax_referer('wpforms-quiz', 'nonce', false)) {
-            error_log('❌ Nonce inválido');
             wp_send_json_error(array('message' => 'Erro de segurança'));
             return;
         }
@@ -838,10 +787,7 @@ class WPForms_Quiz_Score {
         $form_id = isset($_POST['form_id']) ? absint($_POST['form_id']) : 0;
         $field_id = isset($_POST['field_id']) ? absint($_POST['field_id']) : 0;
         
-        error_log(sprintf('📝 Dados recebidos - Form ID: %d, Field ID: %d', $form_id, $field_id));
-        
         if (!$form_id || !$field_id) {
-            error_log('❌ IDs inválidos');
             wp_send_json_error(array('message' => 'Dados inválidos'));
             return;
         }
@@ -889,12 +835,10 @@ class WPForms_Quiz_Score {
         }
 
         if ($result === false) {
-            error_log('❌ Erro ao salvar: ' . $wpdb->last_error);
             wp_send_json_error(array('message' => 'Erro ao salvar campo'));
             return;
         }
 
-        error_log('✅ Campo salvo com sucesso');
         wp_send_json_success(array(
             'message' => 'Campo salvo com sucesso',
             'field_id' => $field_id

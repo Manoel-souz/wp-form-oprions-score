@@ -11,6 +11,7 @@
             this.respostasAnteriores = {};
             this.respostasIncorretas = new Map(); // Store incorrect/partially correct answers
             this.respostasUsuario = new Map(); // Armazena todas as respostas do usuário
+            this.timeoutPontuacao = null; // Timeout para processamento da pontuação
 
             // Busca as respostas do banco via AJAX
             this.carregarRespostasCorretas();
@@ -90,6 +91,10 @@
                                         };
                                     }
                                 });
+                                
+                                // Recalcula pontuações após carregar as respostas
+                                this.recalcularTodasPontuacoes();
+                                this.atualizarPontuacao();
 
                                 resolve();
                             } else {
@@ -137,64 +142,90 @@
             // Get question label
             const questionLabel = this.getQuestionLabel(input);
             
-            // Calculate value per question
-            const totalQuestoes = Object.keys(this.respostasCorretas).length;
-            this.valorQuestao = 10 / totalQuestoes;
-
-            // Remove previous points for this question if any
-            if (this.respostasAnteriores && this.respostasAnteriores[fieldId]) {
-                this.pontos -= this.respostasAnteriores[fieldId];
-            }
-
-            // Initialize previous answers object if it doesn't exist
-            if (!this.respostasAnteriores) {
-                this.respostasAnteriores = {};
-            }
-
-            const respostas = this.respostasCorretas[fieldId];
+            // Armazena a resposta do usuário
+            this.respostasUsuario.set(fieldId, respostaUsuario);
             
-            if (!respostas) {
-                console.warn('⚠️ Nenhuma resposta encontrada para o campo:', fieldId);
-                return;
-            }
+            // Processa a pontuação após um pequeno delay
+            clearTimeout(this.timeoutPontuacao);
+            this.timeoutPontuacao = setTimeout(() => {
+                // Atualiza o total de perguntas respondidas
+                this.totalPerguntas = this.respostasUsuario.size;
+                console.log('Total de perguntas respondidas:', this.totalPerguntas);
+                
+                // Calculate value per question (baseado apenas nas perguntas respondidas)
+                this.valorQuestao = 10 / this.totalPerguntas;
+                
+                // Recalcula todas as pontuações
+                this.recalcularTodasPontuacoes();
+                
+                // Clear previous entry for this question
+                this.respostasIncorretas.delete(fieldId);
 
-            // Clear previous entry for this question
-            this.respostasIncorretas.delete(fieldId);
+                // Verifica a resposta atual
+                const respostas = this.respostasCorretas[fieldId];
+                
+                if (!respostas) {
+                    console.warn('⚠️ Nenhuma resposta encontrada para o campo:', fieldId);
+                    return;
+                }
 
-            if (respostaUsuario === respostas.primary_answer) {
-                // Primary answer correct - full value
-                this.marcarCorreta(input);
-                this.respostasAnteriores[fieldId] = this.valorQuestao;
-                this.pontos += this.valorQuestao;
-            } else {
-                // Store information about incorrect/partially correct answer
-                this.respostasIncorretas.set(fieldId, {
-                    pergunta: questionLabel,
-                    respostaUsuario: respostaUsuario,
-                    respostaCorreta: respostas.primary_answer,
-                    respostaSecundaria: respostas.secondary_answer
-                });
-
-                if (respostaUsuario === respostas.secondary_answer) {
-                    // Secondary answer correct - half value
+                if (respostaUsuario === respostas.primary_answer) {
+                    // Primary answer correct - full value
                     this.marcarCorreta(input);
-                    this.respostasAnteriores[fieldId] = this.valorQuestao / 2;
+                    this.respostasAnteriores[fieldId] = this.valorQuestao;
+                } else {
+                    // Store information about incorrect/partially correct answer
+                    this.respostasIncorretas.set(fieldId, {
+                        pergunta: questionLabel,
+                        respostaUsuario: respostaUsuario,
+                        respostaCorreta: respostas.primary_answer,
+                        respostaSecundaria: respostas.secondary_answer
+                    });
+
+                    if (respostaUsuario === respostas.secondary_answer) {
+                        // Secondary answer correct - half value
+                        this.marcarCorreta(input);
+                        this.respostasAnteriores[fieldId] = this.valorQuestao / 2;
+                    } else {
+                        // Incorrect answer - 1/6 value
+                        this.marcarIncorreta(input);
+                        this.respostasAnteriores[fieldId] = this.valorQuestao / 6;
+                    }
+                }
+
+                // Update incorrect answers display
+                this.atualizarRespostasIncorretas();
+                
+                // Atualiza a pontuação
+                this.atualizarPontuacao();
+            }, 500);
+        }
+
+        recalcularTodasPontuacoes() {
+            // Zera a pontuação
+            this.pontos = 0;
+            
+            // Recalcula com base em todas as respostas dadas
+            for (const [fieldId, respostaUsuario] of this.respostasUsuario.entries()) {
+                const respostas = this.respostasCorretas[fieldId];
+                
+                if (!respostas) continue;
+                
+                if (respostaUsuario === respostas.primary_answer) {
+                    // Resposta primária correta - valor total
+                    this.pontos += this.valorQuestao;
+                } else if (respostaUsuario === respostas.secondary_answer) {
+                    // Resposta secundária correta - metade do valor
                     this.pontos += this.valorQuestao / 2;
                 } else {
-                    // Incorrect answer - 1/6 value
-                    this.marcarIncorreta(input);
-                    this.respostasAnteriores[fieldId] = this.valorQuestao / 6;
+                    // Resposta incorreta - 1/6 do valor
                     this.pontos += this.valorQuestao / 6;
                 }
             }
-
-            // Update incorrect answers display
-            this.atualizarRespostasIncorretas();
             
-            // Round to one decimal place
+            // Arredonda para uma casa decimal
             this.pontos = Math.round(this.pontos * 10) / 10;
-            
-            this.atualizarPontuacao();
+            console.log('Pontuação recalculada:', this.pontos);
         }
 
         getFieldId(element) {
@@ -231,13 +262,11 @@
         }
 
         atualizarPontuacao() {
-
             // Usa this.pontos ao invés de window.pontos
-            const notaDecimal = Math.round(this.pontos * 10) / 10;
+            const notaDecimal = this.pontos;
             const notaInteira = Math.round(notaDecimal);
             
             // Tenta encontrar o campo de pontuação
-            
             const possiveisElementos = [
                 document.querySelector(`#wpforms-${formId}-field_${wpformsQuizData.scoreFieldId}`),
                 document.querySelector(`#wpforms-field_${wpformsQuizData.scoreFieldId}`),
@@ -268,6 +297,8 @@
             document.querySelectorAll('.quiz-score-display').forEach(display => {
                 display.textContent = notaDecimal.toFixed(1);
             });
+            
+            console.log('Pontuação atualizada:', notaDecimal.toFixed(1));
         }
 
         extrairFieldId(elemento) {
@@ -513,6 +544,7 @@
             const container = document.querySelector('.quiz-incorrect-answers');
             const textareaField = document.querySelector(`#wpforms-${formId}-field_${wpformsQuizData.incorrectAnswersFieldId}`);
             
+            // Atualiza o total de perguntas respondidas
             let conteudoRespostas = '';
 
             if (this.respostasIncorretas.size === 0) {
@@ -524,7 +556,8 @@
                 this.respostasIncorretas.forEach((info) => {
                     respostasFormatadas.push(
                         `Questão: ${info.pergunta}\n` +
-                        `Sua resposta: ${info.respostaUsuario}\n`
+                        `Sua resposta: ${info.respostaUsuario}\n` +
+                        `Resposta esperada: ${info.respostaCorreta} ${info.respostaSecundaria ? `ou ${info.respostaSecundaria}` : ''} \n`
                     );
                 });
                 

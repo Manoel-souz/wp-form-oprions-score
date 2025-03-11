@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WPForms Options Quiz Score
  * Description: Adiciona um sistema avançado de pontuação e avaliação automática para formulários WPForms, permitindo criar questionários interativos com feedback instantâneo
- * Version: 1.1.0
+ * Version: 1.1.2
  * Author: Manoel de Souza
  * Author URI: https://optionstech.com.br
  * Plugin URI: https://optionstech.com.br

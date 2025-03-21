@@ -250,7 +250,7 @@
         atualizarPontuacao() {
             // Usa this.pontos ao invés de window.pontos
             const notaDecimal = this.pontos;
-            const notaInteira = Math.round(notaDecimal);
+            const notaInteira = Math.floor(notaDecimal);
             
             // Tenta encontrar o campo de pontuação
             const possiveisElementos = [
@@ -280,6 +280,7 @@
             document.querySelectorAll('.quiz-score-display').forEach(display => {
                 display.textContent = notaDecimal.toFixed(1);
             });
+
         }
 
         extrairFieldId(elemento) {
